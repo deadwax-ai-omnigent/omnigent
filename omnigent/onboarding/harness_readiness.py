@@ -24,7 +24,7 @@ that would actually work.
 
 from __future__ import annotations
 
-import importlib.util
+import os
 
 from omnigent.harness_aliases import HARNESS_ALIASES, canonicalize_harness
 from omnigent.onboarding.harness_install import CURSOR_KEY, PI_KEY, harness_cli_installed
@@ -91,12 +91,18 @@ def harness_is_configured(harness: str) -> bool:
     if canonical in _SDK_HARNESSES:
         return True
     if canonical == CURSOR_KEY:
-        # Cursor drives the ``cursor-sdk`` Python package (a baseline dependency
-        # that bundles its own bridge), NOT a ``cursor-agent`` CLI on PATH. Gate
-        # on the SDK being importable; its Cursor API key resolves at runtime
-        # from sources the daemon can't enumerate (like the other SDK harnesses),
-        # so the key is not gated here.
-        return importlib.util.find_spec("cursor_sdk") is not None
+        # Cursor runs in-process via the ``cursor-sdk`` package (a baseline
+        # dependency, always importable) and authenticates against Cursor's own
+        # backend with a ``CURSOR_API_KEY`` — the SDK requires one, and a
+        # ``cursor-agent login`` does not apply. So, unlike the CLI-wrapping
+        # harnesses, there is no binary to gate on: readiness is whether a key
+        # is resolvable — one stored by ``omnigent setup`` (the ``cursor:``
+        # config block — see :mod:`omnigent.onboarding.cursor_auth`) or
+        # inherited from the environment. That is the one cursor credential the
+        # daemon can check cheaply and locally; a bad key surfaces at run time.
+        from omnigent.onboarding.cursor_auth import cursor_api_key_configured
+
+        return cursor_api_key_configured() or bool(os.environ.get("CURSOR_API_KEY"))
     if canonical not in _HARNESS_FAMILY and canonical != PI_SURFACE:
         # Unknown harness — the daemon has no install metadata for it, so
         # it can't assess readiness. Fail open (custom/newer harnesses,

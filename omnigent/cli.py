@@ -7631,50 +7631,99 @@ def _manage_harness_providers(family: str) -> None:
 
 
 def _manage_cursor_harness() -> None:
-    """Run the level-2 loop for Cursor: install hint, then sign in / out.
+    """Run the level-2 loop for Cursor: manage its ``CURSOR_API_KEY``.
 
-    Cursor authenticates against its own backend (``cursor-agent login`` /
-    ``CURSOR_API_KEY``), so it has no provider/gateway credential — this drives
-    the CLI's own auth, not the provider menu. An uninstalled CLI shows the
-    install command (curl installer, not npm) and returns; otherwise the loop
-    toggles sign-in / sign-out, confirming each via the CLI's status.
+    Cursor runs via the ``cursor-sdk`` package and authenticates against
+    Cursor's own backend with a ``CURSOR_API_KEY`` — the SDK requires one (a
+    ``cursor-agent login`` does not apply, and cursor has no provider/gateway
+    family). So this manages exactly that credential: set / replace / remove an
+    API key stored in the omnigent secret store, mirroring how the other
+    harnesses persist their api keys (the secret in the store, a
+    ``keychain:``/``env:`` reference in ``~/.omnigent/config.yaml``).
+
+    :returns: None. Side effects: may write the ``cursor:`` block of
+        ``~/.omnigent/config.yaml`` and the secret store.
     """
-    from omnigent.onboarding.harness_install import (
-        CURSOR_KEY,
-        harness_cli_installed,
-        harness_cli_logged_in,
-        harness_install_spec,
-        harness_login,
-        harness_logout,
-    )
-    from omnigent.onboarding.interactive import console, select
-
-    if not harness_cli_installed(CURSOR_KEY):
-        spec = harness_install_spec(CURSOR_KEY)
-        hint = spec.install_hint if spec is not None else None
-        console.print(
-            "  Cursor's CLI (`cursor-agent`) isn't installed. Install it with:\n"
-            f"    [bold]{hint}[/bold]\n"
-            "  then re-open setup to sign in (or set CURSOR_API_KEY)."
-        )
-        return
+    from omnigent.onboarding import secrets as secret_store
+    from omnigent.onboarding.cursor_auth import cursor_api_key_configured, cursor_api_key_ref
+    from omnigent.onboarding.interactive import select
 
     status: str | None = None
     while True:
-        logged_in = harness_cli_logged_in(CURSOR_KEY)
-        action = "Sign out (cursor-agent logout)" if logged_in else "Sign in (cursor-agent login)"
-        idx = select(
-            "Cursor — " + ("signed in" if logged_in else "not signed in"),
-            [action, "← Back"],
-            clear_on_exit=True,
-            status=status,
-        )
-        if idx < 0 or idx == 1:  # Esc / q / Back
+        config = _load_global_config()
+        key_set = cursor_api_key_configured(config)
+
+        rows: list[_HarnessMenuRow] = [
+            _HarnessMenuRow(
+                "Replace API key (CURSOR_API_KEY)" if key_set else "Set API key (CURSOR_API_KEY)",
+                action="set_key",
+            )
+        ]
+        if key_set:
+            rows.append(_HarnessMenuRow("Remove API key", action="remove_key"))
+        rows.append(_HarnessMenuRow("← Back", action="back"))
+
+        header = "Cursor — API key configured" if key_set else "Cursor — no API key yet"
+        idx = select(header, [r.label for r in rows], clear_on_exit=True, status=status)
+        if idx < 0:  # Esc / q
             return
-        if logged_in:
-            status = "Signed out" if harness_logout(CURSOR_KEY) else "Sign-out did not complete"
-        else:
-            status = "✓ Signed in" if harness_login(CURSOR_KEY) else "Sign-in did not complete"
+        action = rows[idx].action
+        if action == "back":
+            return
+        if action == "set_key":
+            status = _set_cursor_api_key()
+        elif action == "remove_key":
+            ref = cursor_api_key_ref(config)
+            # Only a keychain-stored secret is ours to delete; an ``env:`` ref
+            # points at the user's own environment, so just drop the config.
+            if ref is not None and ref.startswith("keychain:"):
+                secret_store.delete_secret(ref[len("keychain:") :])
+            _save_global_config({}, unset_keys=("cursor",))
+            status = "✓ Removed Cursor API key"
+
+
+def _set_cursor_api_key() -> str | None:
+    """Prompt for and store a Cursor ``CURSOR_API_KEY``; return a status line.
+
+    Offers an existing ``CURSOR_API_KEY`` from the environment first (recorded
+    as an ``env:`` reference, so the secret never enters the config or the
+    secret store), else reads the key with a hidden prompt and stores it in the
+    omnigent secret store under ``keychain:cursor``. The ``crsr_`` prefix is
+    validated with a soft warning so a wrong paste is caught without
+    hard-blocking a future key format. The key value is never echoed.
+
+    :returns: A confirmation string for the menu's transient status, or
+        ``None`` when the user aborted (empty input / declined the warning).
+    """
+    from omnigent.onboarding import secrets as secret_store
+    from omnigent.onboarding.cursor_auth import (
+        CURSOR_SECRET_NAME,
+        cursor_api_key_settings,
+        looks_like_cursor_api_key,
+    )
+    from omnigent.onboarding.interactive import prompt_text
+
+    detected = os.environ.get("CURSOR_API_KEY")
+    if detected and click.confirm(
+        "Detected CURSOR_API_KEY in the environment — use it?", default=True
+    ):
+        if not looks_like_cursor_api_key(detected) and not click.confirm(
+            "$CURSOR_API_KEY doesn't start with 'crsr_'. Use it anyway?", default=False
+        ):
+            return None
+        _save_global_config(cursor_api_key_settings("env:CURSOR_API_KEY"))
+        return "✓ Cursor API key set (from $CURSOR_API_KEY)"
+
+    pasted = prompt_text("Cursor API key (CURSOR_API_KEY)", hide_input=True).strip()
+    if not pasted:
+        return None
+    if not looks_like_cursor_api_key(pasted) and not click.confirm(
+        "That doesn't start with 'crsr_'. Store it anyway?", default=False
+    ):
+        return None
+    secret_store.store_secret(CURSOR_SECRET_NAME, pasted)
+    _save_global_config(cursor_api_key_settings(f"keychain:{CURSOR_SECRET_NAME}"))
+    return "✓ Cursor API key stored"
 
 
 def _manage_credential(provider: str, family: str) -> str | None:
@@ -7956,11 +8005,8 @@ def _run_configure_harnesses_interactive() -> None:
         performs while navigating.
     """
     from omnigent.onboarding.configure_models import family_label
-    from omnigent.onboarding.harness_install import (
-        CURSOR_KEY,
-        harness_cli_installed,
-        harness_cli_logged_in,
-    )
+    from omnigent.onboarding.cursor_auth import cursor_api_key_configured
+    from omnigent.onboarding.harness_install import CURSOR_KEY, harness_cli_installed
     from omnigent.onboarding.interactive import select
     from omnigent.onboarding.provider_config import (
         ANTHROPIC_FAMILY,
@@ -8036,20 +8082,23 @@ def _run_configure_harnesses_interactive() -> None:
                 options.append(f"  {sub_line}")
                 selectable.append(False)  # a sub-line — cursor skips it
                 row_target.append(None)
-        # Cursor: login-only (own backend), no provider credential to configure.
-        # Readiness is "CLI installed + signed in"; its drill-in drives
-        # cursor-agent's own auth, not the provider menu.
-        cursor_installed = harness_cli_installed(CURSOR_KEY)
-        cursor_ready = cursor_installed and harness_cli_logged_in(CURSOR_KEY)
-        options.append(f"{'  ' if cursor_ready else '[red]✗[/] '}Cursor")
+        # Cursor: runs via the ``cursor-sdk`` package and authenticates with a
+        # ``CURSOR_API_KEY`` (the SDK requires one; it has no provider/gateway
+        # family and a ``cursor-agent login`` does not apply). So readiness is
+        # simply whether an API key is configured — one stored by setup (the
+        # ``cursor:`` block) or inherited from the environment — and its
+        # drill-in manages exactly that key.
+        cursor_key_set = cursor_api_key_configured(config) or bool(
+            os.environ.get("CURSOR_API_KEY")
+        )
+        options.append(f"{'  ' if cursor_key_set else '[red]✗[/] '}Cursor")
         selectable.append(True)
         row_target.append(CURSOR_KEY)
-        if not cursor_installed:
-            cursor_sub = "[dim]not installed yet — open to install[/]"
-        elif cursor_ready:
-            cursor_sub = "[green]✓[/] signed in via cursor-agent"
-        else:
-            cursor_sub = "[dim]not signed in — open to log in[/]"
+        cursor_sub = (
+            "[green]✓[/] API key configured"
+            if cursor_key_set
+            else "[dim]no API key yet — open to add one[/]"
+        )
         options.append(f"  {cursor_sub}")
         selectable.append(False)
         row_target.append(None)
