@@ -243,6 +243,25 @@ class _FakePostToolCallHook:
         return None
 
 
+class _FakeToolWithSchema:
+    """Mirror of ``google.antigravity.tools.tool_runner.ToolWithSchema``.
+
+    Pairs a callable with an explicit JSON ``input_schema`` (mirroring the real
+    wrapper's positional ``(fn, input_schema)`` constructor and ``__call__``
+    that forwards kwargs), so tests can assert the executor passes the spec's
+    ``parameters`` through as the model-facing schema.
+    """
+
+    def __init__(self, fn: Any, input_schema: dict[str, Any]) -> None:
+        self.fn = fn
+        self.input_schema = input_schema
+        self.__name__ = fn.__name__
+        self.__doc__ = fn.__doc__
+
+    async def __call__(self, **kwargs: Any) -> Any:
+        return await self.fn(**kwargs)
+
+
 def _install_fake_sdk(
     monkeypatch: pytest.MonkeyPatch,
     *,
@@ -265,10 +284,17 @@ def _install_fake_sdk(
     class _FakeTypes:
         AntigravityCancelledError = _AntigravityCancelledError
 
+    class _FakeToolRunner:
+        ToolWithSchema = _FakeToolWithSchema
+
+    class _FakeTools:
+        tool_runner = _FakeToolRunner
+
     class _FakeModule:
         LocalAgentConfig = _FakeLocalAgentConfig
         hooks = _FakeHooks
         types = _FakeTypes
+        tools = _FakeTools
 
         @staticmethod
         def Agent(config: Any) -> _FakeAgent:
@@ -318,6 +344,73 @@ def test_latest_user_text_prefers_last_user_message() -> None:
         {"role": "user", "content": [{"type": "text", "text": "second"}]},
     ]
     assert _latest_user_text(messages) == "second"
+
+
+def test_tool_signature_tracks_params_and_description() -> None:
+    """The agent cache key changes on a params/description change, stable otherwise.
+
+    The signature keys the per-session SDK agent cache; if it ignored a tool's
+    ``parameters`` / ``description`` (the old name-only behavior), a schema or
+    description edit would not bust the cache and the model would keep the stale
+    declaration. It must also be stable across equivalent specs (dict key order,
+    re-serialization).
+    """
+    sig = AntigravityExecutor._tool_signature
+    base = [
+        {
+            "name": "sys_shell",
+            "description": "Run a shell command",
+            "parameters": {"type": "object", "properties": {"cmd": {"type": "string"}}},
+        }
+    ]
+
+    # Identical content (with reordered dict keys) → identical signature.
+    reordered = [
+        {
+            "parameters": {"properties": {"cmd": {"type": "string"}}, "type": "object"},
+            "description": "Run a shell command",
+            "name": "sys_shell",
+        }
+    ]
+    assert sig(base) == sig(reordered)
+
+    # A changed parameters schema busts the key.
+    changed_params = [
+        {
+            "name": "sys_shell",
+            "description": "Run a shell command",
+            "parameters": {
+                "type": "object",
+                "properties": {"cmd": {"type": "string"}, "timeout": {"type": "integer"}},
+            },
+        }
+    ]
+    assert sig(base) != sig(changed_params)
+
+    # A changed description busts the key (name + params unchanged).
+    changed_desc = [
+        {
+            "name": "sys_shell",
+            "description": "Run a shell command (with a timeout)",
+            "parameters": {"type": "object", "properties": {"cmd": {"type": "string"}}},
+        }
+    ]
+    assert sig(base) != sig(changed_desc)
+
+    # Tool order doesn't matter (sorted), but the set of tools does.
+    two_a = [base[0], {"name": "sys_read", "description": "d", "parameters": {}}]
+    two_b = [{"name": "sys_read", "description": "d", "parameters": {}}, base[0]]
+    assert sig(two_a) == sig(two_b)
+    assert sig(base) != sig(two_a)
+
+    # Two tools sharing a name and description but differing only by parameters
+    # must not raise (the declarations are sorted as strings, not as tuples with
+    # un-orderable dict/None tail elements) — and still produce a stable key.
+    same_name = [
+        {"name": "t", "description": "d", "parameters": {"properties": {"a": {}}}},
+        {"name": "t", "description": "d", "parameters": None},
+    ]
+    assert sig(same_name) == sig(list(reversed(same_name)))
 
 
 @pytest.mark.asyncio
@@ -556,6 +649,56 @@ async def test_tool_request_deduped_across_steps(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.asyncio
+async def test_idless_tool_request_deduped_across_steps(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A repeated id-less tool call (same name + args) yields exactly one request.
+
+    Id-less calls can't dedupe on an id, so the executor keys them on a content
+    surrogate (tool name + canonical args). The SDK re-emits the same call
+    across step transitions; without the surrogate each emission would surface a
+    duplicate :class:`ToolCallRequest`.
+    """
+    call = _FakeToolCall("sys_shell", {"cmd": "ls"}, call_id=None)
+    script: list[_TurnAction] = [
+        _tool_call_step(call, status=_StepStatus.ACTIVE),
+        _tool_call_step(call, status=_StepStatus.DONE),
+    ]
+    _install_fake_sdk(monkeypatch, scripts=[script])
+    executor = AntigravityExecutor()
+
+    events = await _drain(executor, [{"role": "user", "content": "go", "session_id": "s1"}])
+
+    requests = [e for e in events if isinstance(e, ToolCallRequest)]
+    # 1, not 2: the content surrogate collapses the two id-less emissions of the
+    # same logical call into a single request.
+    assert len(requests) == 1
+    assert requests[0].name == "sys_shell"
+    assert requests[0].args == {"cmd": "ls"}
+
+
+@pytest.mark.asyncio
+async def test_idless_tool_requests_distinct_args_not_deduped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two id-less calls to the same tool with different args are both emitted.
+
+    Guards against the surrogate over-collapsing: distinct argument payloads are
+    distinct logical calls and must each surface a request.
+    """
+    script: list[_TurnAction] = [
+        _tool_call_step(_FakeToolCall("sys_shell", {"cmd": "ls"}, call_id=None)),
+        _tool_call_step(_FakeToolCall("sys_shell", {"cmd": "pwd"}, call_id=None)),
+    ]
+    _install_fake_sdk(monkeypatch, scripts=[script])
+    executor = AntigravityExecutor()
+
+    events = await _drain(executor, [{"role": "user", "content": "go", "session_id": "s1"}])
+
+    requests = [e for e in events if isinstance(e, ToolCallRequest)]
+    assert len(requests) == 2
+    assert {r.args["cmd"] for r in requests} == {"ls", "pwd"}
+
+
+@pytest.mark.asyncio
 async def test_terminal_error_step_yields_executor_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """A TERMINAL_ERROR step surfaces an ExecutorError and suppresses TurnComplete."""
     script: list[_TurnAction] = [
@@ -721,19 +864,94 @@ async def test_sys_tools_exposed_as_callables_routing_through_executor(
     sdk_tools = captured["configs"][0].tools
     assert sdk_tools is not None and len(sdk_tools) == 1
     sdk_tool = sdk_tools[0]
-    # LocalAgentConfig.tools is list[Callable]; the SDK reads __name__/__doc__.
-    assert callable(sdk_tool)
+    # The tool reaches the SDK as a ToolWithSchema wrapper; the SDK reads its
+    # __name__/__doc__ for the declaration and invokes it with kwargs.
     assert sdk_tool.__name__ == "sys_shell"
     assert sdk_tool.__doc__ == "Run a shell command"
-
-    # Invoking the callable (kwargs form) routes back through the bridge.
+    # Invoking the wrapper (kwargs form, how the SDK calls it) routes through
+    # the bridge.
     assert await sdk_tool(cmd="ls") == {"ok": True}
-    # Single-dict argument form also works (SDK arg-shape tolerance).
-    assert await sdk_tool({"cmd": "pwd"}) == {"ok": True}
+    # The underlying bridge callable still tolerates the SDK's other arg shapes
+    # (single dict, JSON string) — unchanged by the schema wrapper.
+    bridge_callable = sdk_tool.fn
+    assert await bridge_callable({"cmd": "pwd"}) == {"ok": True}
+    assert await bridge_callable('{"cmd": "whoami"}') == {"ok": True}
     assert calls == [
         {"name": "sys_shell", "args": {"cmd": "ls"}},
         {"name": "sys_shell", "args": {"cmd": "pwd"}},
+        {"name": "sys_shell", "args": {"cmd": "whoami"}},
     ]
+
+
+@pytest.mark.asyncio
+async def test_tool_parameters_reach_sdk_declaration(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bridged tool's ``parameters`` JSON schema reaches the SDK tool declaration.
+
+    Without this the executor registered a bare callable carrying only
+    name/description, so the model never saw the argument shapes and had to
+    guess them. The SDK's ``ToolWithSchema`` wrapper exposes the schema verbatim
+    via ``.input_schema``; this asserts the spec's ``parameters`` land there.
+    """
+    captured = _install_fake_sdk(monkeypatch, scripts=[[_text_step("done")]])
+    executor = AntigravityExecutor()
+
+    async def _fake_tool_executor(name: str, args: dict[str, Any]) -> dict[str, Any]:
+        return {"ok": True}
+
+    executor._tool_executor = _fake_tool_executor
+
+    schema = {
+        "type": "object",
+        "properties": {"cmd": {"type": "string"}, "timeout": {"type": "integer"}},
+        "required": ["cmd"],
+    }
+    tool_specs = [
+        {"name": "sys_shell", "description": "Run a shell command", "parameters": schema}
+    ]
+
+    await _drain(executor, [{"role": "user", "content": "go", "session_id": "s1"}], tool_specs)
+
+    sdk_tools = captured["configs"][0].tools
+    assert sdk_tools is not None and len(sdk_tools) == 1
+    sdk_tool = sdk_tools[0]
+    # Wrapped in ToolWithSchema: name/doc preserved AND the parameters schema is
+    # attached as input_schema (what callable_to_tool_proto serializes for the
+    # model), not discarded.
+    assert sdk_tool.__name__ == "sys_shell"
+    assert sdk_tool.__doc__ == "Run a shell command"
+    assert sdk_tool.input_schema == schema
+    # The wrapped callable still routes through the bridge (kwargs form).
+    assert await sdk_tool(cmd="ls") == {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_tool_without_parameters_registers_bare_callable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A tool with no ``parameters`` schema falls back to a bare callable.
+
+    The SDK then introspects the callable's signature (the pre-schema path);
+    the executor must not wrap an empty/absent schema in ToolWithSchema.
+    """
+    captured = _install_fake_sdk(monkeypatch, scripts=[[_text_step("done")]])
+    executor = AntigravityExecutor()
+
+    async def _fake_tool_executor(name: str, args: dict[str, Any]) -> dict[str, Any]:
+        return {"ok": True}
+
+    executor._tool_executor = _fake_tool_executor
+
+    await _drain(
+        executor,
+        [{"role": "user", "content": "go", "session_id": "s1"}],
+        [{"name": "ping", "description": "no-arg tool", "parameters": {}}],
+    )
+
+    sdk_tool = captured["configs"][0].tools[0]
+    # Bare callable: it carries name/doc but is NOT a ToolWithSchema wrapper.
+    assert callable(sdk_tool)
+    assert not hasattr(sdk_tool, "input_schema")
+    assert sdk_tool.__name__ == "ping"
 
 
 @pytest.mark.asyncio
@@ -1063,10 +1281,17 @@ def _install_blocking_sdk(
     class _FakeTypes:
         AntigravityCancelledError = _AntigravityCancelledError
 
+    class _FakeToolRunner:
+        ToolWithSchema = _FakeToolWithSchema
+
+    class _FakeTools:
+        tool_runner = _FakeToolRunner
+
     class _FakeModule:
         LocalAgentConfig = _FakeLocalAgentConfig
         hooks = _FakeHooks
         types = _FakeTypes
+        tools = _FakeTools
 
         @staticmethod
         def Agent(config: Any) -> _BlockingAgent:

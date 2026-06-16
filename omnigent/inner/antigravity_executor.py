@@ -395,13 +395,37 @@ class AntigravityExecutor(Executor):
 
     @staticmethod
     def _tool_signature(tools: list[ToolSpec]) -> str:
-        """Stable cache key for a tool set (names only — enough to detect change).
+        """Stable cache key for a tool set (name + description + parameters).
+
+        Keyed on the full declaration the SDK builds — name, description, and
+        ``parameters`` JSON schema — so that a change to a tool's description or
+        argument schema (not just its name) busts the cached SDK agent and the
+        model sees the new declaration. Built from a sorted, canonicalized
+        structure so it's deterministic and stable when nothing meaningful
+        changed (dict key order doesn't matter).
 
         :param tools: Omnigent tool specs for the turn.
-        :returns: Deterministic JSON string of the sorted tool names.
+        :returns: Deterministic JSON string of the sorted per-tool declarations.
         """
-        names = sorted(str(tool.get("name", "")) for tool in tools)
-        return json.dumps(names, separators=(",", ":"))
+        # Canonicalize each declaration to a string first (``sort_keys`` makes
+        # nested ``parameters`` dicts order-independent), then sort the strings.
+        # Sorting strings — not the raw tuples — avoids a ``TypeError`` from
+        # comparing un-orderable ``parameters`` values (dict vs dict / None)
+        # when two tools share a name and description.
+        declarations = sorted(
+            json.dumps(
+                [
+                    str(tool.get("name", "")),
+                    str(tool.get("description", "")),
+                    tool.get("parameters"),
+                ],
+                separators=(",", ":"),
+                sort_keys=True,
+                default=str,
+            )
+            for tool in tools
+        )
+        return json.dumps(declarations, separators=(",", ":"))
 
     async def close_session(self, session_key: str) -> None:
         """Close and drop the SDK agent for *session_key*, if any.
@@ -646,14 +670,17 @@ class AntigravityExecutor(Executor):
     ) -> None:
         """Enqueue a :class:`ToolCallRequest` for each new tool call in *step*.
 
-        Calls repeat across step transitions, so each call id is emitted once
-        and its start time recorded for the matching :class:`ToolCallComplete`.
-        Id-less calls are always emitted (can't dedupe) and get a synthetic id
-        so the completion hook can still pair them.
+        Calls repeat across step transitions, so each is emitted once. An id'd
+        call dedupes on its id; an id-less call dedupes on a stable surrogate
+        (tool name + canonical JSON of its args) and is assigned a synthetic id
+        on first sight, so a repeated id-less call reuses that id rather than
+        emitting a duplicate request. The start time is recorded for the
+        matching :class:`ToolCallComplete`.
 
         :param step: The current SDK :class:`Step`.
         :param state: The session state (records pending tools by call id).
-        :param seen_tool_ids: Call ids already emitted this turn (mutated).
+        :param seen_tool_ids: Surrogate keys already emitted this turn (mutated)
+            — a real call id for id'd calls, or ``name + args`` for id-less ones.
         """
         queue = state.active_queue
         if queue is None:
@@ -662,16 +689,45 @@ class AntigravityExecutor(Executor):
             name = _tool_name(getattr(call, "name", None))
             if not name:
                 continue
-            raw_id = getattr(call, "id", None)
-            call_id = raw_id if isinstance(raw_id, str) and raw_id else uuid.uuid4().hex
-            if isinstance(raw_id, str) and raw_id:
-                if call_id in seen_tool_ids:
-                    continue
-                seen_tool_ids.add(call_id)
             raw_args = getattr(call, "args", None)
             args: ToolArgs = raw_args if isinstance(raw_args, dict) else {}
+            raw_id = getattr(call, "id", None)
+            # An id'd call dedupes on (and pairs by) its real id; an id-less call
+            # dedupes on a content surrogate and gets a synthetic id so the
+            # completion hook can still pair it.
+            if isinstance(raw_id, str) and raw_id:
+                surrogate = raw_id
+                call_id = raw_id
+            else:
+                surrogate = self._idless_surrogate(name, args)
+                call_id = uuid.uuid4().hex
+            # Skip a repeat of an already-seen call (same id, or same name+args
+            # for the id-less case) rather than re-emitting the request.
+            if surrogate in seen_tool_ids:
+                continue
+            seen_tool_ids.add(surrogate)
             state.pending_tools[call_id] = _PendingTool(name=name, started=time.monotonic())
             queue.put_nowait(ToolCallRequest(name=name, args=args, metadata={"call_id": call_id}))
+
+    @staticmethod
+    def _idless_surrogate(name: str, args: ToolArgs) -> str:
+        """Build a stable dedupe key for an id-less tool call.
+
+        The SDK re-emits the same call across step transitions; without an id
+        to dedupe on, repeated emissions of the same call (same tool name and
+        arguments) would each surface a :class:`ToolCallRequest`. This pairs
+        the name with a canonical (key-sorted) JSON render of the args so two
+        emissions of the same logical call collapse to one key.
+
+        :param name: The tool's wire name.
+        :param args: The call's argument dict.
+        :returns: A surrogate key string ``"<name>:<canonical-args-json>"``.
+        """
+        try:
+            args_json = json.dumps(args, sort_keys=True, separators=(",", ":"), default=str)
+        except TypeError:
+            args_json = repr(args)
+        return f"{name}:{args_json}"
 
     def _complete_pending_from_step(
         self, step: SDKStep, state: _AntigravitySessionState, status: str
@@ -803,10 +859,12 @@ class AntigravityExecutor(Executor):
 
         Isolated SDK touchpoint. Builds a ``LocalAgentConfig`` from the
         resolved model / prompt / credentials / tools / hooks and enters the
-        agent's async context. Omnigent's tools are exposed as callables
-        (``LocalAgentConfig.tools``) routing through :attr:`_tool_executor`, so
-        the agent runs them under policy. A ``PostToolCallHook`` surfaces a
-        :class:`ToolCallComplete` for every tool the agent runs.
+        agent's async context. Omnigent's tools are exposed via
+        ``LocalAgentConfig.tools`` (schema-bearing ``ToolWithSchema`` wrappers
+        when the spec has a ``parameters`` schema, else bare callables) routing
+        through :attr:`_tool_executor`, so the agent runs them under policy. A
+        ``PostToolCallHook`` surfaces a :class:`ToolCallComplete` for every tool
+        the agent runs.
 
         :param state: The session state the tool-completion hook closes over.
         :param model: The resolved model id to pin.
@@ -816,7 +874,7 @@ class AntigravityExecutor(Executor):
         """
         antigravity = _ensure_antigravity_sdk()
         config_kwargs: _StrAnyDict = {"system_instructions": system_prompt or None}
-        sdk_tools = self._build_sdk_tools(tools)
+        sdk_tools = self._build_sdk_tools(antigravity, tools)
         if sdk_tools:
             config_kwargs["tools"] = sdk_tools
         config_kwargs["hooks"] = [self._build_post_tool_hook(antigravity, state)]
@@ -883,21 +941,29 @@ class AntigravityExecutor(Executor):
 
         return _OmnigentToolCompleteHook()
 
-    def _build_sdk_tools(self, tools: list[ToolSpec]) -> list[SDKTool]:
-        """Build SDK tools (plain callables) from Omnigent tool specs.
+    def _build_sdk_tools(self, antigravity: ModuleType, tools: list[ToolSpec]) -> list[SDKTool]:
+        """Build SDK tools from Omnigent tool specs, with explicit arg schemas.
 
-        The SDK introspects each callable's ``__name__`` / ``__doc__`` for its
-        function declaration. Each routes through :attr:`_tool_executor`, so
-        the agent reaches Omnigent's tool registry under policy. Returns ``[]``
-        when there are no tools or no executor bridge yet (the agent then runs
-        with its native + MCP tools only).
+        Each tool becomes an async callable (``__name__`` / ``__doc__`` set)
+        routing through :attr:`_tool_executor`, so the agent reaches Omnigent's
+        tool registry under policy. When the spec carries a ``parameters`` JSON
+        schema, the callable is wrapped in the SDK's ``ToolWithSchema`` so the
+        model sees the argument shapes (the SDK uses the explicit schema
+        verbatim, bypassing signature introspection); otherwise the bare
+        callable is registered and the SDK introspects its (empty) signature.
+        Returns ``[]`` when there are no tools or no executor bridge yet (the
+        agent then runs with its native + MCP tools only).
 
+        :param antigravity: The imported ``google.antigravity`` module (source
+            of the ``ToolWithSchema`` explicit-schema wrapper).
         :param tools: Omnigent tool specs (``name`` / ``description`` /
             ``parameters``).
-        :returns: A list of named async callables, or ``[]``.
+        :returns: A list of SDK tools (``ToolWithSchema`` or bare callables),
+            or ``[]``.
         """
         if not tools or self._tool_executor is None:
             return []
+        schema_wrapper = self._tool_with_schema_cls(antigravity)
         sdk_tools: list[SDKTool] = []
         for tool in tools:
             name = tool.get("name")
@@ -905,16 +971,45 @@ class AntigravityExecutor(Executor):
                 continue
             description = tool.get("description")
             description = description if isinstance(description, str) else ""
-            sdk_tools.append(self._make_tool_callable(name, description))
+            callable_tool = self._make_tool_callable(name, description)
+            parameters = tool.get("parameters")
+            if schema_wrapper is not None and isinstance(parameters, dict) and parameters:
+                # Pass the spec's JSON schema straight through; the SDK uses it
+                # as the tool's declaration so the model knows each argument.
+                sdk_tools.append(schema_wrapper(callable_tool, parameters))
+            else:
+                sdk_tools.append(callable_tool)
         return sdk_tools
+
+    @staticmethod
+    def _tool_with_schema_cls(antigravity: ModuleType) -> type | None:
+        """Resolve the SDK's ``ToolWithSchema`` explicit-schema wrapper class.
+
+        Isolated SDK touchpoint, duck-typed to tolerate v0.1.x drift: the
+        wrapper lives at ``antigravity.tools.tool_runner.ToolWithSchema`` and
+        pairs a callable with an explicit ``input_schema`` that
+        ``callable_to_tool_proto`` serializes verbatim into the tool
+        declaration. Returns ``None`` when the SDK doesn't expose it, in which
+        case the caller registers bare callables (the SDK then introspects the
+        signature, the pre-schema behavior).
+
+        :param antigravity: The imported ``google.antigravity`` module.
+        :returns: The ``ToolWithSchema`` class, or ``None`` when unavailable.
+        """
+        tools_mod = getattr(antigravity, "tools", None)
+        runner_mod = getattr(tools_mod, "tool_runner", None)
+        wrapper = getattr(runner_mod, "ToolWithSchema", None)
+        return wrapper if isinstance(wrapper, type) else None
 
     def _make_tool_callable(self, tool_name: str, description: str) -> _ToolCallable:
         """Build a named async callable the SDK can register as a tool.
 
         Accepts the SDK's arg shape (kwargs, a single dict, or a JSON string)
         and forwards to :attr:`_tool_executor`. Its ``__name__`` / ``__doc__``
-        are set so the SDK's function-declaration introspection picks up the
-        name and description.
+        are set so the SDK picks up the name and description; the argument
+        schema is supplied separately by :meth:`_build_sdk_tools` wrapping this
+        callable in ``ToolWithSchema`` (the SDK only introspects the bare
+        callable's signature when no explicit schema is provided).
 
         :param tool_name: The Omnigent tool name, e.g. ``"sys_shell"``.
         :param description: Human-readable tool description for the model.
