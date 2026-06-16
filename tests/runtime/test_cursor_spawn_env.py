@@ -17,6 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 from omnigent.runtime.workflow import _build_cursor_spawn_env
 from omnigent.spec.types import (
@@ -131,3 +132,65 @@ def test_no_workdir_omits_bundle_dir_env_var() -> None:
     """No ``workdir`` omits ``HARNESS_CURSOR_BUNDLE_DIR``."""
     env = _build_cursor_spawn_env(_make_spec())
     assert "HARNESS_CURSOR_BUNDLE_DIR" not in env
+
+
+def _write_cursor_config(tmp_path: Path, ref: str) -> None:
+    """Write a ``cursor:`` block referencing *ref* into the isolated config.
+
+    :param tmp_path: The isolated ``OMNIGENT_CONFIG_HOME`` (see the autouse
+        fixture).
+    :param ref: The secret reference to record, e.g. ``"env:CURSOR_KEY_SRC"``.
+    """
+    (tmp_path / "config.yaml").write_text(yaml.safe_dump({"cursor": {"api_key_ref": ref}}))
+
+
+def test_stored_cursor_key_used_when_spec_has_no_auth(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A CURSOR_API_KEY registered via ``omnigent setup`` flows when the spec
+    declares no auth — so a user need not export it in every shell."""
+    monkeypatch.setenv("CURSOR_KEY_SRC", "crsr_stored_123")
+    _write_cursor_config(tmp_path, "env:CURSOR_KEY_SRC")
+    env = _build_cursor_spawn_env(_make_spec(auth=None))
+    assert env["HARNESS_CURSOR_API_KEY"] == "crsr_stored_123"
+
+
+def test_spec_api_key_auth_wins_over_stored_key(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An explicit api-key auth on the spec takes precedence over the stored key.
+
+    Failure means a per-agent ``executor.auth`` is silently overridden by the
+    machine-wide default — the spec must always win.
+    """
+    monkeypatch.setenv("CURSOR_KEY_SRC", "crsr_stored_123")
+    _write_cursor_config(tmp_path, "env:CURSOR_KEY_SRC")
+    env = _build_cursor_spawn_env(_make_spec(auth=ApiKeyAuth(api_key="crsr_explicit_999")))
+    assert env["HARNESS_CURSOR_API_KEY"] == "crsr_explicit_999"
+
+
+def test_databricks_auth_does_not_adopt_stored_cursor_key(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An explicit ``DatabricksAuth`` never adopts the stored cursor key.
+
+    The stored-key fallback applies ONLY to a spec with no auth at all; a
+    databricks-routed spec has explicitly chosen a non-cursor credential, so
+    pulling the cursor key would mis-authenticate the run.
+    """
+    monkeypatch.setenv("CURSOR_KEY_SRC", "crsr_stored_123")
+    _write_cursor_config(tmp_path, "env:CURSOR_KEY_SRC")
+    env = _build_cursor_spawn_env(_make_spec(auth=DatabricksAuth(profile="oss")))
+    assert "HARNESS_CURSOR_API_KEY" not in env
+
+
+def test_unresolvable_stored_key_is_omitted(tmp_path: Path) -> None:
+    """A dangling stored reference resolves softly to no env var.
+
+    The ``cursor:`` block names ``env:CURSOR_KEY_SRC`` but the var is unset, so
+    the builder must omit ``HARNESS_CURSOR_API_KEY`` (leaving cursor's own
+    login / inherited key to satisfy auth) rather than crash the spawn.
+    """
+    _write_cursor_config(tmp_path, "env:CURSOR_KEY_SRC")
+    env = _build_cursor_spawn_env(_make_spec(auth=None))
+    assert "HARNESS_CURSOR_API_KEY" not in env
