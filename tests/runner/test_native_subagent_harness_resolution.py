@@ -33,6 +33,7 @@ and PASSES once the streaming dispatch path is made sub-agent-aware.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -171,6 +172,65 @@ async def test_subagent_turn_spawns_child_native_harness_without_prior_post() ->
     assert all(h == "claude-native" for h in harnesses), (
         f"runner asked the process manager to spawn {harnesses!r} for the "
         "sub-agent session; expected only 'claude-native'. A 'claude-sdk' "
+        "spawn is the bug: it respawns the harness and tears down the live "
+        "claude-native terminal ('Bridge closed: terminal resource not found')."
+    )
+
+
+@pytest.mark.asyncio
+async def test_subagent_background_turn_resolves_child_native_harness() -> None:
+    """The fire-and-forget turn path must also resolve the CHILD harness.
+
+    ``POST /v1/sessions/{child}/events`` with ``stream=false`` runs the
+    PRIMARY turn path (``_run_turn_bg`` -> ``_run_turn_bg_setup_and_stream``),
+    which derives the harness from the (swapped) cached spec and bakes it
+    into the ``TurnDispatch``. That path reads the sub-agent name to perform
+    the swap; with the in-memory map empty (post-reconnect) it must recover
+    the name from the server snapshot, otherwise it bakes the PARENT
+    ``claude-sdk`` harness and the process manager respawns the child's
+    ``claude-native`` terminal away ("Bridge closed").
+
+    This covers the gap the streaming test above does not: the background
+    path computes the harness itself rather than deferring to
+    ``_resolve_harness_config``.
+    """
+    hc = _ScriptedHarnessClient(
+        [
+            _sse({"type": "response.created", "response": {"id": "r1"}}),
+            _sse({"type": "response.completed", "response": {"id": "r1"}}),
+        ]
+    )
+    pm = _FakeProcessManager(hc)
+    app = create_runner_app(
+        process_manager=pm,  # type: ignore[arg-type]
+        spec_resolver=_parent_spec_resolver,
+        server_client=_SubAgentSnapshotServer(),  # type: ignore[arg-type]
+    )
+
+    async with _runner_client(app) as client:
+        resp = await client.post(
+            f"/v1/sessions/{CHILD_SESSION_ID}/events",
+            json={
+                "type": "message",
+                "role": "user",
+                "agent_id": PARENT_AGENT_ID,
+                "content": [{"type": "input_text", "text": "hi"}],
+            },
+        )
+        # Fire-and-forget returns 202; the background turn runs get_client.
+        assert resp.status_code == 202, f"{resp.status_code} {resp.text}"
+
+    # Let the background turn task reach get_client.
+    for _ in range(200):
+        if pm.get_client_calls:
+            break
+        await asyncio.sleep(0.01)
+
+    harnesses = [h for (_conv, h, _env) in pm.get_client_calls]
+    assert harnesses, "the background turn never asked the process manager for a harness"
+    assert all(h == "claude-native" for h in harnesses), (
+        f"background turn asked the process manager to spawn {harnesses!r} for "
+        "the sub-agent session; expected only 'claude-native'. A 'claude-sdk' "
         "spawn is the bug: it respawns the harness and tears down the live "
         "claude-native terminal ('Bridge closed: terminal resource not found')."
     )
