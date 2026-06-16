@@ -21,10 +21,8 @@ name: Maintainer Approval
 # This is safe because the job checks out nothing and runs no PR code --
 # it only reads .github/MAINTAINER from main and queries the API.
 #
-# `pull_request_target` does not fire on reviews, so an approval does
-# not re-run this check by itself. maintainer-approval-rerun.yml +
-# maintainer-approval-rerun-run.yml re-run this workflow when a
-# maintainer submits an approving review, flipping the check green.
+# `pull_request_review` fires directly on review submission, so the
+# check re-evaluates as soon as a maintainer approves.
 #
 # Why read .github/MAINTAINER from main's tip (not the PR head): a PR
 # that adds its own author to MAINTAINER must not be able to self-grant.
@@ -32,6 +30,8 @@ name: Maintainer Approval
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review]
+  pull_request_review:
+    types: [submitted]
 
 permissions:
   contents: read
