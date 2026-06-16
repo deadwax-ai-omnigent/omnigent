@@ -117,9 +117,8 @@ _TIMEOUT_REJECTED_RE = re.compile(r"greater than\s+(\d+)\s*hour", re.IGNORECASE)
 # time"). A wheel install or git clone must not be killed mid-run.
 _COMMAND_NO_TIMEOUT: int = 0
 
-# Resources (vCPU / memory) are baked into the E2B TEMPLATE at build time,
-# not passed to Sandbox.create(), so there are no _SANDBOX_CPU / _MEMORY
-# constants here — sizing lives in the template (see deploy/e2b/README.md).
+# No _SANDBOX_CPU / _MEMORY constants: E2B bakes resources into the template
+# at build time, not at Sandbox.create() (see deploy/e2b/README.md).
 
 
 def resolve_max_lifetime_s() -> int:
@@ -264,9 +263,8 @@ class _E2BRemoteProcess(RemoteProcess):
         Unlike Modal / Islo (whose handles expose no kill), E2B's
         ``CommandHandle.kill`` really stops the remote process, so this
         is a true teardown. Idempotent and best-effort: a process that
-        already exited is left alone.
+        already exited is left alone, and close() never raises.
         """
-        # Best-effort teardown — close() must never raise.
         with contextlib.suppress(Exception):
             self._handle.kill()
 
@@ -649,7 +647,7 @@ class E2BSandboxLauncher(SandboxLauncher):
         :returns: Handle over the streaming process.
         :raises click.ClickException: When the command cannot be started.
         """
-        del pty  # combined output comes from routing both callbacks to one queue
+        del pty  # unused (see docstring)
         from e2b.exceptions import SandboxException
 
         handle = self._resolve(sandbox_id)
