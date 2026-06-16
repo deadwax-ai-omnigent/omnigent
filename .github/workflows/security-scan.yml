@@ -15,16 +15,20 @@ name: Security Scan
 # / uv sync / test). Detectors run fail-fast -- the first finding fails the job,
 # so a clean PR must pass every one.
 #
-# Trust tiers (should-scan.sh): trusted (OWNER/MEMBER/COLLABORATOR) and non-PR
-# events aren't scanned; returning contributors are; first-timers are held by
-# GitHub's native fork-approval gate first.
+# Trust tiers (should-scan.sh): trusted (OWNER/MEMBER/COLLABORATOR, or an author
+# in the MAINTAINERS list -- covers maintainers with private org membership) and
+# non-PR events aren't scanned; returning contributors are; first-timers are held
+# by GitHub's native fork-approval gate first.
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    # labeled/unlabeled so applying or removing the maintainer skip label
+    # (skip-security-scan) re-runs the scan and flips this check.
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
 
 permissions:
   contents: read
+  pull-requests: read   # read PR labels + reviews for the maintainer skip waiver
 
 concurrency:
   group: security-scan-${{ github.event.pull_request.number }}
@@ -45,14 +49,27 @@ jobs:
           ref: main             # trusted; never the PR head
           sparse-checkout: |
             .github/scripts/security-scan
+            .github/scripts/merge-ready
             .github/security
           persist-credentials: false
+
+      - name: Load maintainers
+        id: maintainers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: bash .github/scripts/merge-ready/load-maintainers.sh
 
       - name: Trust gate
         id: gate
         env:
           EVENT_NAME: ${{ github.event_name }}
           AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+          # For the maintainer-effective skip-security-scan waiver (read-only).
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          MAINTAINERS: ${{ steps.maintainers.outputs.list }}
         run: |
           # Before this lands on main the scripts are absent there -- proceed
           # (fail-open) so the introducing PR is not bricked.
@@ -80,6 +97,12 @@ jobs:
         env:
           DIFF_FILE: ${{ github.workspace }}/pr.diff
         run: python3 .github/scripts/security-scan/secret-scan.py
+
+      - name: Exfil scan (added lines)
+        if: ${{ steps.gate.outputs.scan == 'true' }}
+        env:
+          DIFF_FILE: ${{ github.workspace }}/pr.diff
+        run: python3 .github/scripts/security-scan/exfil-scan.py
 
       - name: Sensitive-path guard
         if: ${{ steps.gate.outputs.scan == 'true' }}

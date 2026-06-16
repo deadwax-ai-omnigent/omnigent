@@ -49,6 +49,7 @@ from omnigent.llms.summarize import (
     build_summarization_prompt,
     extract_summary_text,
 )
+from omnigent.model_override import validate_model_override
 from omnigent.runner import pending_approvals
 from omnigent.runner.proxy_mcp_manager import ProxyMcpManager
 from omnigent.runner.resource_registry import (
@@ -583,8 +584,19 @@ async def _codex_native_launch_config(
     ):
         raise RuntimeError(f"Invalid terminal_launch_args for Codex session {session_id!r}.")
     model_override = snapshot.get("model_override")
-    if model_override is not None and (not isinstance(model_override, str) or not model_override):
-        raise RuntimeError(f"Invalid model_override for Codex session {session_id!r}.")
+    if model_override is not None:
+        if not isinstance(model_override, str) or not model_override:
+            raise RuntimeError(f"Invalid model_override for Codex session {session_id!r}.")
+        # Defense-in-depth: re-validate the persisted override at the runner
+        # boundary so a value that somehow bypassed server-side validation
+        # can never reach the Codex ``config.toml`` / ``--model`` argv as
+        # shell- or TOML-shaped input.
+        try:
+            validate_model_override(model_override)
+        except ValueError as exc:
+            raise RuntimeError(
+                f"Invalid model_override for Codex session {session_id!r}: {exc}"
+            ) from exc
     external_session_id = snapshot.get("external_session_id")
     if external_session_id is not None and (
         not isinstance(external_session_id, str) or not external_session_id
@@ -2880,6 +2892,13 @@ class _SessionSnapshot:
     :param workspace: Server-stored workspace path, or ``None``.
     :param agent_id: Bound agent id, or ``None`` when not yet bound /
         the fetch failed, e.g. ``"ag_abc123"``.
+    :param sub_agent_name: For sub-agent sessions, the dispatched
+        sub-agent's name, e.g. ``"claude_code"`` — used to swap the
+        parent spec to the child's sub-spec so the child's harness
+        (e.g. ``claude-native``) is resolved instead of the parent's.
+        ``None`` for top-level sessions. Projected from the server
+        snapshot so the identity survives a runner reconnect / spec-cache
+        eviction (the in-memory ``_session_sub_agent_names`` map does not).
     """
 
     ok: bool
@@ -2887,6 +2906,7 @@ class _SessionSnapshot:
     created_at: float
     workspace: str | None
     agent_id: str | None
+    sub_agent_name: str | None = None
 
 
 def _spec_with_workdir_paths(spec: Any, workdir: Path | None) -> Any:
@@ -4533,6 +4553,7 @@ def create_runner_app(
             created_at: float | None = None
             workspace: str | None = None
             agent_id: str | None = None
+            sub_agent_name: str | None = None
             try:
                 resp = await server_client.get(f"/v1/sessions/{session_id}")
                 status_code = resp.status_code
@@ -4545,6 +4566,16 @@ def create_runner_app(
                     raw_agent_id = body.get("agent_id")
                     if isinstance(raw_agent_id, str) and raw_agent_id:
                         agent_id = raw_agent_id
+                    # Sub-agent identity (SessionResponse.sub_agent_name).
+                    # Projected here so harness resolution can swap to the
+                    # child's sub-spec even after the in-memory
+                    # _session_sub_agent_names map is lost (reconnect /
+                    # cache eviction) — the bug that respawned a sub-agent's
+                    # claude-native harness as the parent's claude-sdk and
+                    # tore down its terminal ("Bridge closed").
+                    raw_sub_agent = body.get("sub_agent_name")
+                    if isinstance(raw_sub_agent, str) and raw_sub_agent:
+                        sub_agent_name = raw_sub_agent
             except Exception:  # noqa: BLE001 — best-effort; created_at falls back to wall time
                 pass
             snapshot = _SessionSnapshot(
@@ -4553,6 +4584,7 @@ def create_runner_app(
                 created_at=created_at if created_at is not None else time.time(),
                 workspace=workspace,
                 agent_id=agent_id,
+                sub_agent_name=sub_agent_name,
             )
             # Cache only a complete snapshot. A 200 with agent_id still
             # null means the agent has not bound yet; caching it would
@@ -6053,6 +6085,38 @@ def create_runner_app(
                     item_type,
                     exc_info=True,
                 )
+
+    async def _recover_sub_agent_name(conv_id: str) -> str | None:
+        """Resolve a session's sub-agent name, recovering it if lost.
+
+        The in-memory ``_session_sub_agent_names`` map is populated only on
+        ``POST /v1/sessions`` and wiped on a runner restart / cleared on
+        session delete. A continuation turn that reaches a harness-resolution
+        path after a tunnel reconnect therefore finds it empty and resolves
+        the PARENT harness for a child session — respawning the harness and
+        tearing down the child's native terminal ("Bridge closed").
+
+        This recovers the identity from the authoritative server snapshot
+        (``GET /v1/sessions/{id}`` -> ``sub_agent_name``) and backfills the
+        in-memory map so subsequent reads are cheap. Best-effort: a failed
+        lookup returns ``None`` (a top-level session, or the snapshot is
+        unavailable), preserving the prior behavior.
+
+        :param conv_id: Session/conversation identifier, e.g. ``"conv_abc123"``.
+        :returns: The sub-agent name, or ``None`` for a top-level session
+            (or when it cannot be resolved).
+        """
+        cached = _session_sub_agent_names.get(conv_id)
+        if cached:
+            return cached
+        try:
+            snapshot = await _session_snapshot(conv_id)
+        except Exception:  # noqa: BLE001 — best-effort recovery
+            return None
+        name = snapshot.sub_agent_name if snapshot is not None else None
+        if name:
+            _session_sub_agent_names[conv_id] = name
+        return name
 
     def _session_harness_name(conv_id: str) -> str | None:
         """
@@ -8028,7 +8092,16 @@ def create_runner_app(
         # the child gets the sub-agent's prompt/tools, not the
         # parent's (which would cause infinite recursion via
         # sys_session_send).
-        _sa_name = _session_sub_agent_names.get(conv)
+        #
+        # Recover the name from the server snapshot when the in-memory map
+        # was lost (runner restart / tunnel reconnect): without this, a
+        # continuation turn for a claude-native sub-agent resolves the
+        # parent's claude-sdk harness, the process manager respawns, and the
+        # child's native terminal is torn down ("Bridge closed: terminal
+        # resource not found"). The snapshot carries sub_agent_name; this
+        # is the primary turn path (the harness baked into TurnDispatch
+        # below comes from the swapped spec, so it must be correct here).
+        _sa_name = await _recover_sub_agent_name(conv)
         if _sa_name and cached_spec is not None:
             from omnigent.runtime.workflow import _find_spec_by_name
 
@@ -8443,6 +8516,12 @@ def create_runner_app(
         spawn_env = dispatch.spawn_env if dispatch else body.get("spawn_env")
         if not harness_name:
             _agent_id = dispatch.agent_id if dispatch else body.get("agent_id")
+            # Recover the sub-agent name (server snapshot if the in-memory
+            # map was lost on reconnect) so a child session resolves its OWN
+            # harness, not the parent's. Without this a continuation turn for
+            # a claude-native sub-agent resolves the parent claude-sdk harness
+            # and respawns, killing the native terminal ("Bridge closed").
+            _sub_agent_name = await _recover_sub_agent_name(conv_id)
             try:
                 harness_name, spawn_env = await _resolve_harness_config(
                     agent_id=_agent_id,
@@ -8450,6 +8529,7 @@ def create_runner_app(
                     session_id=conv_id,
                     model_override=body.get("model_override"),
                     harness_override=body.get("harness_override"),
+                    sub_agent_name=_sub_agent_name,
                 )
             except (httpx.HTTPError, RuntimeError) as exc:
                 return JSONResponse(
@@ -10929,6 +11009,29 @@ def create_runner_app(
                     f"session {session_id!r} was not found",
                     code=ErrorCode.NOT_FOUND,
                 )
+            # Sub-agent swap: the bound agent_id resolves to the PARENT
+            # spec, so cache the child's sub-spec for a sub-agent session.
+            # Otherwise _session_spec_cache (and _session_harness_name /
+            # _is_native_harness, which read it) report the parent harness —
+            # the misclassification that respawns a claude-native sub-agent
+            # as claude-sdk and tears down its terminal ("Bridge closed").
+            # The snapshot carries sub_agent_name; backfill the in-memory map
+            # so the dispatch-path swap is cheap too.
+            sub_agent_name = snapshot.sub_agent_name
+            if sub_agent_name:
+                _session_sub_agent_names[session_id] = sub_agent_name
+                from omnigent.runtime.workflow import _find_spec_by_name
+
+                parent_spec = _unwrap_resolved_spec(spec_entry)
+                if parent_spec is not None:
+                    sub_spec = _find_spec_by_name(parent_spec, sub_agent_name)
+                    if sub_spec is not None:
+                        workdir = _resolved_spec_workdir(spec_entry)
+                        spec_entry = (
+                            ResolvedSpec(spec=sub_spec, workdir=workdir)
+                            if workdir is not None
+                            else sub_spec
+                        )
             _session_spec_cache[session_id] = spec_entry
             return spec_entry
 
@@ -12086,6 +12189,7 @@ async def _resolve_harness_config(
     session_id: str | None = None,
     model_override: str | None = None,
     harness_override: str | None = None,
+    sub_agent_name: str | None = None,
 ) -> tuple[str, dict[str, str] | None]:
     """Resolve harness type + spawn-env from the agent spec.
 
@@ -12097,6 +12201,15 @@ async def _resolve_harness_config(
     :param harness_override: Per-session brain-harness override (validated
         at session create, forwarded by the server in the message body),
         e.g. ``"pi"``. Replaces the spec's ``executor.config.harness``.
+    :param sub_agent_name: For a sub-agent session, the dispatched
+        sub-agent's name (e.g. ``"claude_code"``). The bound *agent_id*
+        resolves to the PARENT spec, so without this swap a child's turn
+        resolves the parent's harness (``claude-sdk``) and the process
+        manager respawns — tearing down the child's live ``claude-native``
+        terminal ("Bridge closed: terminal resource not found"). When set,
+        the parent spec is swapped to the matching sub-spec via
+        :func:`_find_spec_by_name` before harness derivation. ``None`` for
+        top-level sessions.
     :returns: ``(harness, spawn_env)``; a default for unresolved specs.
     """
     if agent_id and spec_resolver:
@@ -12104,6 +12217,17 @@ async def _resolve_harness_config(
         spec = _unwrap_resolved_spec(spec_entry)
         workdir = _resolved_spec_workdir(spec_entry)
         if spec is not None:
+            # Swap to the sub-agent's own spec so its harness (not the
+            # parent's) drives the turn. Mirrors the POST /v1/sessions and
+            # _run_turn_bg swaps; applied here so the harness-HTTP path is
+            # sub-agent-aware too, even after a reconnect drops the
+            # in-memory _session_sub_agent_names map.
+            if sub_agent_name:
+                from omnigent.runtime.workflow import _find_spec_by_name
+
+                sub_spec = _find_spec_by_name(spec, sub_agent_name)
+                if sub_spec is not None:
+                    spec = sub_spec
             harness = harness_override or spec.executor.config.get("harness") or spec.executor.type
             harness = canonicalize_harness(harness) or harness
             spawn_env = _build_spawn_env_from_spec(

@@ -831,16 +831,16 @@ wheels = [
 
 [[package]]
 name = "cwsandbox"
-version = "0.26.0"
+version = "0.24.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "googleapis-common-protos" },
     { name = "grpcio" },
     { name = "protobuf" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ef/d9/540f20685c878f86f8588bff841618e1a125bfb13c8ba4071fe9e041477d/cwsandbox-0.26.0.tar.gz", hash = "sha256:541fbef6fd5cf7b70e2692bf3f35a2ae8f2a577e5caf29162dececb42e973616", size = 489383, upload-time = "2026-06-11T13:09:00.329Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/26/84/b77bd2e551809251f9cd39d9aac6c50410202566ff51f9bf416ced462d57/cwsandbox-0.24.0.tar.gz", hash = "sha256:067a95696d8236197675e3127e75813b10ddad0fbff5e63c7a96c274e7f4b4cc", size = 429780, upload-time = "2026-05-26T19:31:28.397Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/67/61/ac962e3c59d3c349046d204a67c5f301b10ebab4c413b079862fd234a7d5/cwsandbox-0.26.0-py3-none-any.whl", hash = "sha256:88143a5959a93f1a0145a7897d57caabe9c488051e287f185da1a83451896105", size = 178221, upload-time = "2026-06-11T13:08:58.751Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/2e/ce3063c8e0b3f3c6a9e8a81bc39ff77ae38e353ad396cb299afc7c05e5a0/cwsandbox-0.24.0-py3-none-any.whl", hash = "sha256:81fb174c8fe692ef46c9884e58d8062c0f0d2a56783790fb99a8ff4b31d84328", size = 148297, upload-time = "2026-05-26T19:31:26.534Z" },
 ]
 
 [[package]]
@@ -2640,7 +2640,7 @@ dependencies = [
     { name = "anyio" },
     { name = "argon2-cffi" },
     { name = "cachetools" },
-    { name = "cel-expr-python" },
+    { name = "cel-expr-python", marker = "platform_machine != 'aarch64'" },
     { name = "claude-agent-sdk" },
     { name = "click" },
     { name = "cursor-sdk" },
@@ -2736,11 +2736,11 @@ requires-dist = [
     { name = "boto3", marker = "extra == 'bedrock'", specifier = ">=1.30,<2" },
     { name = "botocore", marker = "extra == 'bedrock'", specifier = ">=1.30,<2" },
     { name = "cachetools", specifier = ">=5.0,<7" },
-    { name = "cel-expr-python", specifier = ">=0.1" },
+    { name = "cel-expr-python", marker = "platform_machine != 'aarch64'", specifier = ">=0.1" },
     { name = "claude-agent-sdk", specifier = ">=0.1.62" },
     { name = "click", specifier = ">=8.0,<8.2" },
     { name = "cursor-sdk", specifier = ">=0.1.7" },
-    { name = "cwsandbox", marker = "extra == 'cwsandbox'", specifier = ">=0.26,<1" },
+    { name = "cwsandbox", marker = "extra == 'cwsandbox'", specifier = ">=0.24,<1" },
     { name = "databricks-mcp", marker = "extra == 'databricks'", specifier = ">=0.1.0" },
     { name = "databricks-sdk", marker = "extra == 'all'", specifier = ">=0.56.0,<1" },
     { name = "databricks-sdk", marker = "extra == 'databricks'", specifier = ">=0.56.0,<1" },
