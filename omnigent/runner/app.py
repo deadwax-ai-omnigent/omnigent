@@ -2956,6 +2956,14 @@ class _SessionSnapshot:
     sub_agent_name: str | None = None
 
 
+# Match the language constant the omnigent YAML translator stamps on
+# callable-backed tools (omnigent/spec/omnigent.py:OMNIGENT_TOOL_LANGUAGE).
+# Duplicated rather than imported to avoid pulling the heavy translator
+# module in for one string — same rationale as
+# omnigent/tools/local_callable.py.
+_OMNIGENT_CALLABLE_LANGUAGE = "omnigent-python-callable"
+
+
 def _spec_with_workdir_paths(spec: Any, workdir: Path | None) -> Any:
     if workdir is None or spec is None:
         return spec
@@ -2966,7 +2974,17 @@ def _spec_with_workdir_paths(spec: Any, workdir: Path | None) -> Any:
     changed = False
     for info in local_tools:
         path = getattr(info, "path", None)
-        if path and not Path(path).is_absolute():
+        # Only file-based local tools carry a workdir-relative path
+        # (e.g. ``tools/python/foo.py``). Callable-backed tools store a
+        # dotted import path (``pkg.mod.func``) in the same field; joining
+        # that to the workdir corrupts it into a bogus filesystem path, the
+        # import fails, the tool never registers, and any tool_call policy
+        # narrowed to it can never fire.
+        if (
+            path
+            and getattr(info, "language", None) != _OMNIGENT_CALLABLE_LANGUAGE
+            and not Path(path).is_absolute()
+        ):
             resolved_tools.append(dataclasses.replace(info, path=str((workdir / path).resolve())))
             changed = True
         else:

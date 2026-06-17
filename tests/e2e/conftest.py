@@ -730,6 +730,7 @@ def register_inline_agent(
     prompt: str,
     mock_llm_base_url: str | None = None,
     builtin_tools: list[str] | None = None,
+    extra_config: dict[str, Any] | None = None,
 ) -> str:
     """
     Register a single-file omnigent agent built in-memory.
@@ -751,6 +752,9 @@ def register_inline_agent(
         instead of ``api.openai.com``.
     :param builtin_tools: When set, add a ``tools.builtins`` list to
         the agent spec, e.g. ``["list_files", "upload_file"]``.
+    :param extra_config: When set, top-level keys shallow-merged into
+        the agent YAML before upload (e.g. ``tools`` and ``policies``).
+        ``name``/``prompt``/``executor`` stay helper-controlled.
     :returns: The agent name (use the return value, not the *name*
         argument, they differ on rerun attempts).
     """
@@ -779,6 +783,14 @@ def register_inline_agent(
     }
     if builtin_tools:
         config["tools"] = {"builtins": builtin_tools}
+    if extra_config:
+        for key, value in extra_config.items():
+            config[key] = value
+        # Reapply identity keys so a stray override can't desync the
+        # agent name the caller gets back from later turns.
+        config["name"] = name
+        config["prompt"] = prompt
+        config["executor"] = executor
     with io.BytesIO() as buf:
         with tarfile.open(fileobj=buf, mode="w:gz") as tar:
             yaml_bytes = yaml.dump(config).encode()
