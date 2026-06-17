@@ -92,6 +92,10 @@ _ALT_COVERED: frozenset[str] = frozenset(
         "hello_world",
         # Covered by test_yaml_hello_world.py's tool-dispatch test.
         "agent_with_tools",
+        # CI-only tool-less classifier that outputs JSON for the
+        # issue-triage workflow. No runtime behavior to e2e test —
+        # validated by the workflow's trusted allowlist parsing.
+        "triage",
         # Covered by test_yaml_policies.py.
         "agent_with_policies",
         # Covered by tests/e2e/test_coder_subagent.py +
