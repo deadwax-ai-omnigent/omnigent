@@ -59,15 +59,6 @@ class DownloadFileTool(Tool):
                             "type": "string",
                             "description": ('The file ID to download, e.g. "file_abc123".'),
                         },
-                        "destination": {
-                            "type": "string",
-                            "description": (
-                                "Optional path within the workspace "
-                                "to save the file. Defaults to the "
-                                "original filename in the workspace "
-                                "root."
-                            ),
-                        },
                     },
                     "required": ["file_id"],
                 },
@@ -78,8 +69,6 @@ class DownloadFileTool(Tool):
         """
         Download a file and save it to the workspace.
 
-        :param arguments: JSON with ``"file_id"`` and optional
-            ``"destination"`` keys.
         :param ctx: Provides workspace path for saving.
         :returns: JSON string with the local file path, or error.
         """
@@ -115,7 +104,6 @@ class DownloadFileTool(Tool):
 
         try:
             dest = _resolve_destination(
-                args.get("destination"),
                 record.filename,
                 ctx.workspace,
             )
@@ -135,25 +123,23 @@ class DownloadFileTool(Tool):
 
 
 def _resolve_destination(
-    destination: str | None,
     filename: str,
     workspace: Path | None,
 ) -> Path:
     """
     Resolve the save path for a downloaded file.
 
-    Both ``destination`` (LLM-supplied) and ``filename`` (from the
-    file store, set by whoever uploaded the file) are untrusted, so
-    the result is confined to the base directory; a path that would
-    escape it via ``..``, an absolute path, or a symlink is rejected.
+    The stored ``filename`` is untrusted metadata (it originates from
+    whoever uploaded the file and is persisted verbatim). It is reduced
+    to its bare basename and confined to the workspace via
+    :func:`safe_resolve`, so a malicious name such as ``../../escape``
+    or an absolute path cannot cause a write outside the workspace.
 
-    :param destination: User-specified relative path, or ``None``
-        to use the original filename.
     :param filename: The file's original filename from the store.
     :param workspace: The agent's workspace directory, or ``None``.
-    :returns: Absolute path within the base directory.
-    :raises ValueError: If the path escapes the base directory.
+    :returns: Absolute path to save the file, confined to ``workspace``.
+    :raises ValueError: If the resolved path escapes the workspace.
     """
     base = workspace or Path.cwd()
-    rel_path = destination or Path(filename).name
-    return safe_resolve(rel_path, base)
+    name = Path(filename).name or "downloaded.bin"
+    return safe_resolve(name, base)

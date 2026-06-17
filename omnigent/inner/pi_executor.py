@@ -580,6 +580,7 @@ _PI_ENV_ALLOW_EXACT: frozenset[str] = frozenset(
         "TZ",
     }
 )
+_STREAM_READ_CHUNK_SIZE = 65536
 
 
 def _build_models_json(
@@ -616,7 +617,17 @@ def _build_models_json(
     :returns: Pi ``models.json`` contents.
     """
     h = host.rstrip("/")
-    openai_base_url = (base_urls or {}).get("openai") or f"{h}/serving-endpoints"
+    serving_endpoints_url = f"{h}/serving-endpoints"
+    raw_openai_base_url = (base_urls or {}).get("openai")
+    # ucode's ``openai`` gateway is the Codex Responses gateway
+    # (``.../ai-gateway/codex/v1``), which 404s pi's openai-completions
+    # ``/chat/completions`` POST. Re-route only that case to serving-endpoints;
+    # generic providers (no ``/ai-gateway/codex``) pass through. Gemini rides
+    # this path via databricks-completions since pi can't speak generateContent.
+    if raw_openai_base_url and "/ai-gateway/codex" in raw_openai_base_url:
+        openai_base_url = serving_endpoints_url
+    else:
+        openai_base_url = raw_openai_base_url or serving_endpoints_url
     claude_base_url = (base_urls or {}).get("claude") or f"{h}/serving-endpoints/anthropic"
     config: dict[str, Any] = {  # type: ignore[explicit-any]  # Pi-owned schema, see note above
         "providers": {
@@ -817,7 +828,7 @@ class _PiRpcSession:
         """Background task: read lines from Pi stdout and enqueue them."""
         assert self.process is not None and self.process.stdout is not None
         try:
-            async for raw_line in self.process.stdout:
+            async for raw_line in self._iter_stream_lines(self.process.stdout):
                 line = raw_line.decode("utf-8", errors="replace").rstrip("\n\r")
                 if line:
                     self._line_queue.put_nowait(line)
@@ -833,7 +844,7 @@ class _PiRpcSession:
         if self.process is None or self.process.stderr is None:
             return
         try:
-            async for raw_line in self.process.stderr:
+            async for raw_line in self._iter_stream_lines(self.process.stderr):
                 text = raw_line.decode("utf-8", errors="replace").rstrip("\n\r")
                 if text:
                     logger.debug("pi stderr: %s", text)
@@ -841,6 +852,29 @@ class _PiRpcSession:
                         self._stderr_lines.append(text)
         except (asyncio.CancelledError, Exception):  # noqa: BLE001 — stderr drainer is best-effort; never crashes
             pass
+
+    @staticmethod
+    async def _iter_stream_chunks(stream: asyncio.StreamReader) -> AsyncIterator[bytes]:
+        while True:
+            chunk = await stream.read(_STREAM_READ_CHUNK_SIZE)
+            if not chunk:
+                break
+            yield chunk
+
+    @staticmethod
+    async def _iter_stream_lines(stream: asyncio.StreamReader) -> AsyncIterator[bytes]:
+        buffer = bytearray()
+        async for chunk in _PiRpcSession._iter_stream_chunks(stream):
+            buffer.extend(chunk)
+            while True:
+                newline_index = buffer.find(b"\n")
+                if newline_index < 0:
+                    break
+                line = bytes(buffer[: newline_index + 1])
+                del buffer[: newline_index + 1]
+                yield line
+        if buffer:
+            yield bytes(buffer)
 
     async def send_command(self, command: CodexEvent) -> None:
         """Send a JSONL command to Pi's stdin."""
@@ -1162,7 +1196,7 @@ def _extract_pi_turn_usage(
     that :class:`TurnComplete` consumes, so pi sub-agent cost is priced
     the same way as ``claude-sdk`` and ``codex`` turns.
 
-    Pi (``@mariozechner/pi-coding-agent``) forwards assistant messages
+    Pi (``@earendil-works/pi-coding-agent``) forwards assistant messages
     whose ``usage`` dict carries ``input`` / ``output`` / ``cacheRead`` /
     ``cacheWrite`` / ``totalTokens`` token counts, and the message itself
     carries the resolved ``model``. This translates those into omnigent's

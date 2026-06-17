@@ -621,6 +621,12 @@ class ChildSessionSummary(BaseModel):
         consult is what keeps the rail's "Working" badge correct.
     :param labels: Session-scoped guardrails labels on the child
         conversation (mirrors :class:`ConversationObject.labels`).
+    :param last_task_error: Error details from the child's most recent
+        failed run, e.g.
+        ``{"code": "required_terminal_exited", "message": "..."}``.
+        ``None`` when the child has no durable failure detail. This is
+        the typed projection of runner-owned failure labels; clients
+        should not parse those labels directly.
     :param last_message_preview: Single-line preview of the most
         recent message item in the child's conversation, truncated
         to ~150 chars with a trailing ellipsis when longer. ``None``
@@ -653,6 +659,7 @@ class ChildSessionSummary(BaseModel):
     current_task_status: str | None = None
     busy: bool = False
     labels: dict[str, str] = Field(default_factory=dict)
+    last_task_error: dict[str, str] | None = None
     last_message_preview: str | None = None
     pending_elicitations_count: int = 0
 
@@ -1991,8 +1998,8 @@ class SessionStatusEvent(_SSEEventBase):
     Session lifecycle status transition.
 
     Emitted by the runtime / session route handler at every
-    transition between ``running`` / ``waiting`` / ``idle`` /
-    ``failed``. Wire shape is
+    transition between ``launching`` / ``running`` / ``waiting`` /
+    ``idle`` / ``failed``. Wire shape is
     FLAT (not enveloped): ``{"type": "session.status",
     "conversation_id": "...", "status": "...",
     "sequence_number": null}``.
@@ -2013,9 +2020,10 @@ class SessionStatusEvent(_SSEEventBase):
     :param type: Always ``"session.status"``.
     :param conversation_id: The conversation/session identifier
         whose status changed, e.g. ``"conv_abc123"``.
-    :param status: New session status. ``"idle"`` (no loop
-        running), ``"running"`` (loop executing), ``"waiting"``
-        (parent turn parked on the async-work drain), or
+    :param status: New session status. ``"launching"`` (session or
+        child task created, but no concrete harness start observed),
+        ``"idle"`` (no loop running), ``"running"`` (loop executing),
+        ``"waiting"`` (parent turn parked on the async-work drain), or
         ``"failed"`` (terminal failure).
     :param response_id: Optional active response id for terminal-backed
         integrations, e.g. ``"codex_turn_abc123"``. Clients use it to
@@ -2037,7 +2045,7 @@ class SessionStatusEvent(_SSEEventBase):
 
     type: Literal["session.status"]
     conversation_id: str
-    status: Literal["idle", "running", "waiting", "failed"]
+    status: Literal["idle", "launching", "running", "waiting", "failed"]
     response_id: str | None = None
     error: ErrorDetail | None = None
 

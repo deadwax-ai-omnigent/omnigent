@@ -52,15 +52,29 @@ class _FakeStreamReader:
     """Simulates asyncio.StreamReader with pre-loaded lines."""
 
     def __init__(self, lines: list[bytes]):
-        self._lines = list(lines)
-        self._index = 0
+        self._buffer = bytearray(b"".join(lines))
 
     async def readline(self) -> bytes:
-        if self._index < len(self._lines):
-            line = self._lines[self._index]
-            self._index += 1
+        if not self._buffer:
+            return b""
+        newline_index = self._buffer.find(b"\n")
+        if newline_index >= 0:
+            end = newline_index + 1
+            line = bytes(self._buffer[:end])
+            del self._buffer[:end]
             return line
-        return b""
+        line = bytes(self._buffer)
+        self._buffer.clear()
+        return line
+
+    async def read(self, n: int = -1) -> bytes:
+        if not self._buffer:
+            return b""
+        if n is None or n < 0 or n > len(self._buffer):
+            n = len(self._buffer)
+        chunk = bytes(self._buffer[:n])
+        del self._buffer[:n]
+        return chunk
 
     def __aiter__(self):
         return self
@@ -358,9 +372,11 @@ class TestBuildModelsJson(unittest.TestCase):
             },
         )
         p = result["providers"]
+        # The ucode ``openai`` value is the Codex Responses gateway; GPT and the
+        # catch-all re-route to serving-endpoints, claude keeps its gateway.
         self.assertEqual(
             p["databricks"]["baseUrl"],
-            "https://host.example.com/ai-gateway/codex/v1",
+            "https://host.example.com/serving-endpoints",
         )
         self.assertEqual(
             p["databricks-anthropic"]["baseUrl"],
@@ -368,8 +384,49 @@ class TestBuildModelsJson(unittest.TestCase):
         )
         self.assertEqual(
             p["databricks-completions"]["baseUrl"],
-            "https://host.example.com/ai-gateway/codex/v1",
+            "https://host.example.com/serving-endpoints",
         )
+
+    def test_ucode_codex_gateway_rerouted_off_responses_path(self):
+        # The codex gateway 404s /chat/completions, so it must not survive onto
+        # a completions provider (#241 GPT 404).
+        result = _build_models_json(
+            "https://host.example.com",
+            "tok",
+            {"openai": "https://host.example.com/ai-gateway/codex/v1"},
+        )
+        for name in ("databricks", "databricks-completions"):
+            base_url = result["providers"][name]["baseUrl"]
+            self.assertNotIn("/ai-gateway/codex", base_url)
+            self.assertEqual(base_url, "https://host.example.com/serving-endpoints")
+
+    def test_gemini_model_routed_off_codex_gateway(self):
+        # Gemini falls to the databricks-completions catch-all; it must land on
+        # serving-endpoints, not the codex URL it used to inherit (#241).
+        result = _build_models_json(
+            "https://host.example.com",
+            "tok",
+            {"openai": "https://host.example.com/ai-gateway/codex/v1"},
+            model="databricks-gemini-2-5-pro",
+        )
+        provider = result["providers"][_pi_provider_for_model("databricks-gemini-2-5-pro")]
+        self.assertEqual(provider["baseUrl"], "https://host.example.com/serving-endpoints")
+        self.assertIn(
+            "databricks-gemini-2-5-pro",
+            [entry.get("id") for entry in provider["models"]],
+        )
+
+    def test_generic_openai_base_url_used_as_is(self):
+        # A non-ucode openai URL (no ``/ai-gateway/codex``) must pass through so
+        # the re-route never breaks generic gateways.
+        result = _build_models_json(
+            "https://host.example.com",
+            "tok",
+            {"openai": "https://openrouter.ai/api/v1"},
+        )
+        p = result["providers"]
+        self.assertEqual(p["databricks"]["baseUrl"], "https://openrouter.ai/api/v1")
+        self.assertEqual(p["databricks-completions"]["baseUrl"], "https://openrouter.ai/api/v1")
 
     def test_api_key_set(self):
         result = _build_models_json("https://host.example.com", "mytoken")
@@ -836,6 +893,35 @@ class TestToolServer(unittest.TestCase):
 
 
 class TestPiRpcSession(unittest.TestCase):
+    def test_reader_accepts_single_stdout_line_larger_than_default_stream_limit(self):
+        async def _test():
+            rpc = _PiRpcSession()
+            stream = asyncio.StreamReader()
+            payload = "x" * (70 * 1024)
+            event = {
+                "type": "tool_execution_end",
+                "toolName": "large_result",
+                "isError": False,
+                "result": {"content": payload},
+            }
+            stream.feed_data((json.dumps(event) + "\n").encode())
+            stream.feed_eof()
+            rpc.process = MagicMock()
+            rpc.process.stdout = stream
+            rpc._line_queue = asyncio.Queue()
+
+            await rpc._reader()
+
+            line = await rpc.read_line(timeout=0.1)
+            self.assertIsNotNone(line)
+            parsed = json.loads(line)
+            self.assertEqual(parsed["type"], "tool_execution_end")
+            self.assertEqual(parsed["toolName"], "large_result")
+            self.assertEqual(parsed["result"]["content"], payload)
+            self.assertIsNone(await rpc.read_line(timeout=0.1))
+
+        _run(_test())
+
     def test_send_command(self):
         async def _test():
             rpc = _PiRpcSession()
