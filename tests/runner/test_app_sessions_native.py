@@ -37,6 +37,7 @@ from omnigent.claude_native_bridge import (
 from omnigent.entities.session_resources import SessionResourceView, terminal_resource_id
 from omnigent.inner.terminal import TerminalInstance
 from omnigent.runner import create_runner_app
+from omnigent.runner import tool_dispatch as _tool_dispatch
 from omnigent.runner.app import (
     _RUNNER_DISPATCHED_FIELD,
     _WAKE_POST_MAX_ATTEMPTS,
@@ -710,8 +711,6 @@ async def test_sessions_native_dispatches_native_tool_with_bundle_workdir(
     :func:`test_runner_session_tool_schemas_use_resolved_bundle_workdir`,
     which only proved schema generation used the bundle workdir.
     """
-    import omnigent.runner.tool_dispatch as _tool_dispatch
-
     bundle_dir = tmp_path / "bundle"
     tool_dir = bundle_dir / "tools" / "python"
     tool_dir.mkdir(parents=True)
@@ -808,8 +807,6 @@ async def test_sessions_native_dispatches_builtin_tool_with_runner_workspace(
     original runner workspace even when the agent spec was resolved from an
     extracted bundle directory.
     """
-    import omnigent.runner.tool_dispatch as _tool_dispatch
-
     bundle_dir = tmp_path / "bundle"
     bundle_dir.mkdir()
     workspace = tmp_path / "workspace"
@@ -885,8 +882,6 @@ async def test_mcp_execute_dispatches_builtin_tool_with_runner_workspace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """``/mcp/execute`` also keeps builtin OS-env tools in runner_workspace."""
-    import omnigent.runner.tool_dispatch as _tool_dispatch
-
     bundle_dir = tmp_path / "bundle"
     bundle_dir.mkdir()
     workspace = tmp_path / "workspace"
