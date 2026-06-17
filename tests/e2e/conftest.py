@@ -700,6 +700,7 @@ def register_inline_agent(
     model: str,
     profile: str,
     prompt: str,
+    mock_llm_base_url: str | None = None,
 ) -> str:
     """
     Register a single-file omnigent agent built in-memory.
@@ -716,6 +717,9 @@ def register_inline_agent(
     :param model: Model identifier the executor receives.
     :param profile: Databricks profile name baked into the executor.
     :param prompt: System prompt for the agent.
+    :param mock_llm_base_url: When set, bake an ``auth.type: api_key``
+        block into the executor so the harness hits the mock server
+        instead of ``api.openai.com``.
     :returns: The agent name (use the return value, not the *name*
         argument, they differ on rerun attempts).
     """
@@ -726,10 +730,21 @@ def register_inline_agent(
         # Fresh name per rerun: a 409 re-register would keep the first
         # attempt's model and defeat llm_flaky rotation.
         name = f"{name}-r{attempt}"
+    executor: dict[str, object] = {
+        "harness": harness,
+        "model": resolve_model(model),
+        "profile": profile,
+    }
+    if mock_llm_base_url is not None:
+        executor["auth"] = {
+            "type": "api_key",
+            "api_key": "mock-key",
+            "base_url": mock_llm_base_url,
+        }
     config: dict[str, object] = {
         "name": name,
         "prompt": prompt,
-        "executor": {"harness": harness, "model": resolve_model(model), "profile": profile},
+        "executor": executor,
     }
     with io.BytesIO() as buf:
         with tarfile.open(fileobj=buf, mode="w:gz") as tar:

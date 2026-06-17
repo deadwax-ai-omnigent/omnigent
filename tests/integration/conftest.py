@@ -170,6 +170,7 @@ def journey_session(
     harness_name: str,
     model_name: str,
     request: pytest.FixtureRequest,
+    mock_llm_server_url: str | None,  # noqa: F811
 ) -> JourneySession:
     """Register a fresh inline agent + session for one journey test.
 
@@ -181,6 +182,7 @@ def journey_session(
     :param harness_name: Harness under test.
     :param model_name: Resolved model for this test.
     :param request: Pytest fixture request (for ``--profile``).
+    :param mock_llm_server_url: Mock LLM server URL, or ``None``.
     :returns: The registered agent + bound session.
     """
     agent_name = register_inline_agent(
@@ -194,6 +196,7 @@ def journey_session(
             "exactly and literally. When asked to reply with a token, "
             "reply with the token text only."
         ),
+        mock_llm_base_url=f"{mock_llm_server_url}/v1" if mock_llm_server_url else None,
     )
     session_id = create_runner_bound_session(
         http_client, agent_name=agent_name, runner_id=live_runner_id
