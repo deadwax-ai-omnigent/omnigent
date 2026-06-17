@@ -1,5 +1,6 @@
 name: Feature Request
 description: Suggest a new feature or improvement
+title: "[Feature] "
 labels: ["enhancement", "needs-triage"]
 body:
   - type: textarea
@@ -9,6 +10,22 @@ body:
       description: What problem are you trying to solve, or what use case would this enable?
     validations:
       required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of the system is this feature for?
+      options:
+        - Server
+        - Runner
+        - Repr / Serialization
+        - Web UI
+        - Policies
+        - Harnesses
+        - Other / Not sure
+    validations:
+      required: false
 
   - type: textarea
     id: proposed-solution
