@@ -55,7 +55,7 @@ from omnigent.onboarding.sandboxes.base import (
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from openshell import ExecResult, SandboxClient
+    from openshell import ExecResult
 
 HOST_IMAGE_ENV_VAR: str = "OMNIGENT_OPENSHELL_HOST_IMAGE"
 """Environment variable overriding :data:`DEFAULT_HOST_IMAGE` for
@@ -232,6 +232,10 @@ class _OpenShellClient:
                 ):
                     pass
             except Exception:
+                # Fire-and-forget daemon pump: exec_stream raises (gRPC
+                # cancellation / SandboxError) when the in-sandbox host exits
+                # or the sandbox is deleted — the expected end of this thread,
+                # with no caller left to surface it to.
                 pass
 
         thread = threading.Thread(target=_pump, name=f"openshell-host-{name}", daemon=True)
