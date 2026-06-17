@@ -268,32 +268,54 @@ def mock_llm_server_url(
 def configure_mock_llm(
     mock_llm_server_url: str | None,
     responses: list[dict[str, Any]],
+    *,
+    key: str = "default",
 ) -> None:
     """
-    Configure the mock LLM server's response queue for a test.
+    Configure a keyed response queue on the mock LLM server.
 
     No-op when running against a real LLM. Each dict in *responses*
-    maps to a ``QueuedResponse`` on the mock server::
+    maps to a ``QueuedResponse`` on the mock server. The *key*
+    determines which queue the responses are stored in — the mock
+    server routes each ``POST /v1/responses`` request to the queue
+    whose key matches the request's ``model`` field.
 
-        configure_mock_llm(url, [
-            {"text": "ok"},
-            {"text": "TOKEN-A TOKEN-B"},
-            {"tool_calls": [{"call_id": "c1", "name": "grep", "arguments": "{}"}]},
-            {"text": "done", "block": True},
-        ])
+    Use different keys to give each agent its own response stream::
+
+        # Parent agent uses "mock-parent" model
+        configure_mock_llm(url, [{"text": "spawning reviewer..."}],
+                           key="mock-parent")
+        # Sub-agent uses "mock-reviewer" model
+        configure_mock_llm(url, [{"text": "LGTM"}],
+                           key="mock-reviewer")
 
     :param mock_llm_server_url: Mock server URL or ``None``.
     :param responses: List of response configs. Keys:
         ``text``, ``tool_calls``, ``block``, ``stream``,
         ``error``, ``status_code``.
+    :param key: Queue key — typically the model name baked into the
+        agent spec. Defaults to ``"default"`` (matches any model
+        not assigned to a more specific queue).
     """
     if mock_llm_server_url is None:
         return
     resp = httpx.post(
         f"{mock_llm_server_url}/mock/configure",
-        json={"responses": responses},
+        json={"key": key, "responses": responses},
         timeout=5.0,
     )
+    resp.raise_for_status()
+
+
+def reset_mock_llm(mock_llm_server_url: str | None) -> None:
+    """
+    Clear all keyed queues, captured requests, and gates.
+
+    :param mock_llm_server_url: Mock server URL or ``None``.
+    """
+    if mock_llm_server_url is None:
+        return
+    resp = httpx.post(f"{mock_llm_server_url}/mock/reset", timeout=5.0)
     resp.raise_for_status()
 
 
@@ -309,16 +331,27 @@ def release_mock_gate(mock_llm_server_url: str | None) -> None:
     resp.raise_for_status()
 
 
-def get_mock_requests(mock_llm_server_url: str | None) -> list[dict]:
+def get_mock_requests(
+    mock_llm_server_url: str | None,
+    *,
+    key: str | None = None,
+) -> list[dict]:
     """
-    Retrieve all captured request bodies from the mock LLM server.
+    Retrieve captured request bodies from the mock LLM server.
 
     :param mock_llm_server_url: Mock server URL or ``None``.
+    :param key: When set, only return requests whose ``model``
+        field matches this key.
     :returns: List of request body dicts, or empty list in real mode.
     """
     if mock_llm_server_url is None:
         return []
-    resp = httpx.get(f"{mock_llm_server_url}/mock/requests", timeout=5.0)
+    params = {"key": key} if key else {}
+    resp = httpx.get(
+        f"{mock_llm_server_url}/mock/requests",
+        params=params,
+        timeout=5.0,
+    )
     resp.raise_for_status()
     return resp.json()["requests"]
 
