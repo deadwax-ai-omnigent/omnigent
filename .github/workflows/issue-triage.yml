@@ -318,7 +318,7 @@ jobs:
           ALLOWED_TYPES = {"bug", "enhancement", "documentation"}
           ALLOWED_COMPONENTS = {
               "comp:server", "comp:runner", "comp:repr",
-              "comp:web-ui", "comp:policies", "comp:harnesses",
+              "comp:web-ui", "comp:policies", "comp:harnesses", "comp:infra",
           }
           ALLOWED_PRIORITIES = {"P0-critical", "P1-high", "P2-medium", "P3-low"}
 
