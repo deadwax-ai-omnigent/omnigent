@@ -274,6 +274,20 @@ def _build_sys_session_send_schema(
                                             "omitted = the harness default."
                                         ),
                                     },
+                                    "harness": {
+                                        "type": "string",
+                                        "description": (
+                                            "Optional harness override for "
+                                            "this sub-agent session, e.g. "
+                                            "'opencode-native'. Applies only "
+                                            "when this send CREATES the "
+                                            "session AND the sub-agent spec "
+                                            "allowlists it via "
+                                            "executor.config.allowed_harnesses; "
+                                            "otherwise rejected. Omitted = the "
+                                            "sub-agent's declared harness."
+                                        ),
+                                    },
                                 },
                                 "required": ["input"],
                                 "additionalProperties": False,
@@ -285,10 +299,10 @@ def _build_sys_session_send_schema(
                             "treats this as the first user "
                             "turn in its conversation. Pass a "
                             "plain string for the normal contract, "
-                            "or pass {input, purpose, model} when "
-                            "a spec-level policy requires explicit "
-                            "dispatch metadata or a per-dispatch "
-                            "model override."
+                            "or pass {input, purpose, model, harness} "
+                            "when a spec-level policy requires explicit "
+                            "dispatch metadata, a per-dispatch model "
+                            "override, or an allowlisted harness override."
                         ),
                     },
                 },
