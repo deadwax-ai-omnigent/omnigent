@@ -60,30 +60,6 @@ skips:
     cluster: runner-wedge-subprocess-fanout
     mode: skip
 
-  # Shard 2 iteration: openai-agents harness on databricks-gpt-5-mini
-  # via ai-oss frequently exceeds the test's internal 60s
-  # turn-completion timeout (state stays "running" past the
-  # pexpect deadline). Not test-tunable; needs a faster-model or
-  # higher per-test timeout.
-  - id: tests/e2e/omnigent/test_run_omnigent_policy_enforcement.py::test_policy_denies_tool_call_by_name[codex]
-    reason: "Real policy-enforcement gap: tool_call:calculate deny policy doesn't fire under codex harness; tool runs and returns the real answer instead of the deny sentinel. Needs production fix, not a test patch."
-    issue: 476
-    cluster: policy-guardrails
-    mode: skip
-
-  - id: tests/e2e/omnigent/test_run_omnigent_policy_enforcement.py::test_policy_denies_tool_call_by_name[claude-sdk]
-    reason: "Shard 0 bulk: same policy-enforcement cluster as #476."
-    issue: 476
-    cluster: policy-guardrails
-    mode: skip
-
-  - id: tests/e2e/omnigent/test_run_omnigent_policy_enforcement.py::test_policy_denies_tool_call_by_name[openai-agents]
-    reason: "Shard 0 bulk: same policy-enforcement cluster as #476."
-    issue: 476
-    cluster: policy-guardrails
-    mode: skip
-
-
   - id: tests/e2e/test_cancel_then_file_attachment.py::test_cancel_send_file_cancel_send_file_succeeds
     reason: "Agent calls sys_os_shell to list filesystem instead of reading the uploaded markdown attachment; file attachment may not be reaching the LLM correctly."
     issue: 532
