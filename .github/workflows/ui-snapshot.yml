@@ -131,11 +131,20 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Upload diff on failure (PR runs)
+      - name: Upload diff + generated baseline on failure (PR runs)
+        # Covers two failure cases on a PR run:
+        #   snapshot_failures/  actual/expected/diff PNGs when the page drifted.
+        #   snapshots/          the freshly generated baseline when none existed
+        #                       yet (the plugin writes it and fails with "new
+        #                       snapshot created"). This is the no-admin path to
+        #                       seed the first baseline without workflow_dispatch:
+        #                       download this artifact, commit the PNG, push.
         if: ${{ failure() && github.event_name == 'pull_request' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: ui-snapshot-diff-${{ github.run_id }}
-          path: tests/e2e_ui/visual/snapshot_failures/**
+          path: |
+            tests/e2e_ui/visual/snapshot_failures/**
+            tests/e2e_ui/visual/snapshots/**
           if-no-files-found: ignore
           retention-days: 7
