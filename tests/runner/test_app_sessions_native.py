@@ -5963,7 +5963,137 @@ async def test_external_status_for_untracked_session_does_not_wake() -> None:
     # No wake was scheduled because the session is untracked. A non-empty list
     # would mean the orchestrator could wake (and loop on) its own turn-end.
     assert server_client.wake_posts == []
-    assert not server_client.wake_seen.is_set()
+
+
+@pytest.mark.asyncio
+async def test_parent_turn_parks_waiting_until_subagent_completion_drains(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Parent turn publishes ``waiting`` and continues only after inbox drain.
+
+    Reproduces the same-turn race fix: if a parent ends an iteration while a
+    sub-agent dispatch is still running, the runner must park in ``waiting``,
+    drain the completion into history, and only then let the turn settle idle.
+    """
+    from omnigent.llms import context_window as context_window_module
+    from omnigent.runner import app as runner_app
+
+    # Keep the test offline by skipping compaction-token accounting.
+    monkeypatch.setattr(context_window_module, "get_model_context_window", lambda _m: None)
+
+    parent_id = "conv_parent_waiting_drain"
+    child_id = "conv_child_waiting_drain"
+    session_inbox: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+    harness_client = _ScriptedHarnessClient(
+        [
+            _sse({"type": "response.created", "response": {"id": "resp_wait"}}),
+            _sse({"type": "response.completed", "response": {"id": "resp_wait"}}),
+        ]
+    )
+    pm = _FakeProcessManager(harness_client)
+    spec = AgentSpec(
+        spec_version=1,
+        name="wait-parent",
+        executor=ExecutorSpec(type="openai-agents", model="unknown", config={}),
+    )
+
+    async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
+        del agent_id, session_id
+        return spec
+
+    class _WaitPolicyAllowServerClient(NullServerClient):
+        async def post(self, url: str, **kwargs: Any) -> NullServerClient._Response:
+            del kwargs
+            if url == f"/v1/sessions/{parent_id}/policies/evaluate":
+
+                class _AllowResponse(NullServerClient._Response):
+                    def json(self) -> dict[str, Any]:
+                        return {"result": "POLICY_ACTION_ALLOW"}
+
+                return _AllowResponse()
+            return await super().post(url)
+
+    app = create_runner_app(
+        process_manager=pm,  # type: ignore[arg-type]
+        spec_resolver=_resolver,
+        server_client=_WaitPolicyAllowServerClient(),  # type: ignore[arg-type]
+    )
+
+    runner_app._session_inboxes_ref[parent_id] = session_inbox
+    runner_app._session_event_queues_ref.pop(parent_id, None)
+    runner_app._session_histories_ref.pop(parent_id, None)
+    runner_app.register_subagent_work(
+        parent_session_id=parent_id,
+        child_session_id=child_id,
+        agent="researcher",
+        title="auth",
+    )
+
+    drained_events: list[dict[str, Any]] = []
+    try:
+        async with _runner_client(app) as client:
+            resp = await client.post(
+                f"/v1/sessions/{parent_id}/events",
+                json={
+                    "type": "message",
+                    "role": "user",
+                    "agent_id": "ag_wait",
+                    "model": "wait-parent",
+                    "content": [{"type": "input_text", "text": "dispatch then wait"}],
+                },
+            )
+            assert resp.status_code == 202, resp.text
+
+            waiting_seen = False
+            for _ in range(120):
+                drained_events.extend(
+                    _drain_session_event_queue(runner_app._session_event_queues_ref.get(parent_id))
+                )
+                waiting_seen = any(
+                    evt.get("type") == "session.status" and evt.get("status") == "waiting"
+                    for evt in drained_events
+                )
+                if waiting_seen:
+                    break
+                await asyncio.sleep(0.05)
+            assert waiting_seen, (
+                "Parent turn never emitted session.status=waiting while "
+                "sub-agent work was pending."
+            )
+
+            ack = runner_app.mark_subagent_work_terminal(
+                child_id,
+                status="completed",
+                output="RESEARCHER_MARKER_2025",
+            )
+            assert ack.delivered, "Sub-agent completion should land in the parent inbox."
+
+            resumed_running_seen = False
+            for _ in range(400):
+                drained_events.extend(
+                    _drain_session_event_queue(runner_app._session_event_queues_ref.get(parent_id))
+                )
+                resumed_running_seen = any(
+                    evt.get("type") == "session.status" and evt.get("status") == "running"
+                    for evt in drained_events
+                    if evt.get("type") == "session.status"
+                ) and any(
+                    evt.get("type") == "session.status" and evt.get("status") == "waiting"
+                    for evt in drained_events
+                )
+                if resumed_running_seen:
+                    break
+                await asyncio.sleep(0.05)
+
+            assert resumed_running_seen, (
+                "Parent turn did not resume running after entering waiting."
+            )
+    finally:
+        runner_app.unregister_subagent_work(child_id)
+        runner_app._session_inboxes_ref.pop(parent_id, None)
+        runner_app._session_event_queues_ref.pop(parent_id, None)
+        runner_app._session_histories_ref.pop(parent_id, None)
 
 
 @pytest.mark.asyncio

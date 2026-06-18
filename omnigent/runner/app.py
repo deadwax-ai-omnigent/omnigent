@@ -132,6 +132,10 @@ _WAKE_POST_TRANSIENT_4XX = frozenset({408, 409, 425, 429})
 # the Databricks Apps ingress) can drop the long-lived HTTP connection.
 # Matches the AP-side ``_SESSION_STREAM_HEARTBEAT_INTERVAL_S``.
 _SESSION_STREAM_HEARTBEAT_S = 15.0
+# Poll cadence while a parent turn is parked waiting for async completion.
+_ASYNC_WAIT_POLL_INTERVAL_S = 1.0
+# Keepalive cadence while parked (matches stream heartbeat cadence).
+_ASYNC_WAIT_HEARTBEAT_INTERVAL_S = 15.0
 
 # Lazy singleton LLM client for the runner process. Created on first use so
 # the runner does not import llms at startup (imports are expensive and the
@@ -7920,6 +7924,13 @@ def create_runner_app(
         # `failed` is always published so a real error is never swallowed.
         has_buffered = bool(_session_message_buffers.get(conv_id))
         was_interrupted = conv_id in _interrupted_sessions
+        pending_async_work = (
+            error is None
+            and not was_interrupted
+            and not has_buffered
+            and not _is_native_harness(conv_id)
+            and _has_pending_async_work(conv_id)
+        )
         if was_interrupted:
             _interrupted_sessions.discard(conv_id)
             _append_cancellation_items(conv_id)
@@ -7933,7 +7944,9 @@ def create_runner_app(
             # _publish_turn_status.
             _publish_turn_status(conv_id, "failed", error=_normalize_turn_error(error))
         else:
-            if not has_buffered:
+            if pending_async_work:
+                _publish_turn_status(conv_id, "waiting")
+            elif not has_buffered:
                 _publish_turn_status(conv_id, "idle")
         if was_interrupted:
             _mark_subagent_terminal_and_wake(
@@ -7947,7 +7960,7 @@ def create_runner_app(
                 status="failed",
                 output=f"Error: sub-agent turn failed: {error.get('message', 'unknown')}",
             )
-        elif not _is_native_harness(conv_id) and not has_buffered:
+        elif not _is_native_harness(conv_id) and not has_buffered and not pending_async_work:
             # Defer the success delivery while a continuation is buffered —
             # see the docstring. The continuation turn's own empty-buffer
             # stream end delivers exactly once with the final assistant text.
@@ -7959,13 +7972,109 @@ def create_runner_app(
         # Belt-and-suspenders: POST the terminal status directly to the
         try:
             loop = asyncio.get_running_loop()
-            _cont = loop.create_task(
-                _check_and_start_next_turn(conv_id),
-            )
+            if pending_async_work:
+                # Park the parent turn in "waiting" until async completions
+                # are drained into history, then continue the turn.
+                _active_turns[conv_id] = None
+                _cont = loop.create_task(
+                    _await_pending_async_work(conv_id),
+                )
+            else:
+                _cont = loop.create_task(
+                    _check_and_start_next_turn(conv_id),
+                )
             _cont.add_done_callback(_background_tasks.discard)
             _background_tasks.add(_cont)
         except RuntimeError:
             pass
+
+    def _has_pending_async_work(session_id: str) -> bool:
+        """
+        Whether *session_id* still has undelivered async work.
+
+        Includes:
+        - queued inbox payloads not yet surfaced to the LLM
+        - local ``sys_call_async`` tasks still in flight
+        - registered sub-agent dispatches that have not reached a delivered
+          terminal state.
+        """
+        inbox = _session_inboxes.get(session_id)
+        if inbox is not None and not inbox.empty():
+            return True
+        if _session_async_tasks.get(session_id):
+            return True
+        for entry in list_subagent_work(session_id):
+            if entry.status not in _SUBAGENT_TERMINAL_STATUSES or not entry.delivered:
+                return True
+        return False
+
+    async def _drain_inbox_into_wait_buffer(session_id: str) -> bool:
+        """
+        Drain one parked session's inbox into a synthetic buffered message.
+
+        :returns: ``True`` when a non-empty drain message was buffered.
+        """
+        inbox = _session_inboxes.get(session_id)
+        if inbox is None or inbox.empty():
+            return False
+        from omnigent.runner.tool_dispatch import _drain_inbox as _drain_async_inbox
+
+        drained = await _drain_async_inbox(
+            inbox,
+            server_client=server_client,
+            conversation_id=session_id,
+        )
+        if drained.startswith("Inbox is empty"):
+            return False
+        _session_message_buffers.setdefault(session_id, []).append(
+            {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": drained}],
+            }
+        )
+        return True
+
+    async def _await_pending_async_work(session_id: str) -> None:
+        """
+        Park a parent turn until async completion payloads can be continued.
+
+        While parked:
+        - poll inbox + sub-agent/task registries
+        - emit ``response.heartbeat`` keepalives
+        - react to steering messages buffered by ``post_session_events``.
+        """
+        last_heartbeat = time.monotonic()
+        while True:
+            # Session was deleted/cancelled or another path replaced us.
+            if session_id not in _active_turns:
+                return
+            if await _drain_inbox_into_wait_buffer(session_id):
+                break
+            if _session_message_buffers.get(session_id):
+                break
+            if not _has_pending_async_work(session_id):
+                break
+            now = time.monotonic()
+            if now - last_heartbeat >= _ASYNC_WAIT_HEARTBEAT_INTERVAL_S:
+                _publish_event(session_id, {"type": "response.heartbeat"})
+                last_heartbeat = now
+            await asyncio.sleep(_ASYNC_WAIT_POLL_INTERVAL_S)
+
+        if session_id not in _active_turns:
+            return
+        if _session_message_buffers.get(session_id):
+            await _check_and_start_next_turn(session_id)
+            return
+        # No buffered continuation and no pending work: finalize this turn now.
+        _active_turns.pop(session_id, None)
+        _publish_turn_status(session_id, "idle")
+        if not _is_native_harness(session_id):
+            _mark_subagent_terminal_and_wake(
+                session_id,
+                status="completed",
+                output=_extract_last_assistant_text(session_id),
+            )
 
     async def _cancel_active_turn(
         conv_id: str, expected_task: asyncio.Task[None] | None = None
