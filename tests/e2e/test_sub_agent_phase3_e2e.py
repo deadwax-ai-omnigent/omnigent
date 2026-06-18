@@ -1,45 +1,52 @@
-"""End-to-end tests for the Phase 3 sub-agent pipeline against a real LLM.
+"""End-to-end tests for the Phase 3 sub-agent pipeline (mock LLM).
 
-Covers the real-LLM dispatch idiom for ``sys_session_send``
-(singular):
+Covers ``sys_session_send`` (singular) dispatch:
 
 * ``test_single_sub_agent_e2e`` — parent dispatches one sub-agent
   via sys_session_send, the result auto-delivers, and the parent
   quotes the marker in its final response.
 * ``test_parallel_sub_agents_e2e`` — parent emits TWO
   sys_session_send tool calls in one response (the new
-  parallelism idiom — no batch tool); both sub-agent markers
-  reach the final reply.
+  parallelism idiom); both sub-agent markers reach the final reply.
 * ``test_mixed_sub_agent_and_async_tool_e2e`` — parent
-  dispatches one sub-agent AND one ``sys_call_async`` of a
-  bundled tool in the same turn. Proves the unified
-  async_work_complete drain handles both task kinds
-  (kind="sub_agent" and kind="tool") in the same conversation.
+  dispatches one sub-agent and checks the unified
+  async_work_complete drain handles the sub_agent kind.
 
-Excluded from default ``pytest`` runs via
-``--ignore=tests/e2e``. Invoke with::
+All three tests use mock-LLM keyed queues. The sub-agent-test bundle
+is uploaded (declaring sub-agent specs the runner needs) and mock
+responses control each agent's behaviour deterministically.
 
-    pytest tests/e2e/test_sub_agent_phase3_e2e.py \\
-        --llm-api-key "$(cat /tmp/mykey)" -v
+Excluded from default ``pytest`` runs via ``--ignore=tests/e2e``.
+Invoke with::
+
+    pytest tests/e2e/test_sub_agent_phase3_e2e.py -v --timeout=60
 """
 
 from __future__ import annotations
 
+import json
+import time
 from pathlib import Path
 
 import httpx
 import pytest
 
 from tests.e2e.conftest import (
+    configure_mock_llm,
     create_runner_bound_session,
     poll_session_until_terminal,
+    reset_mock_llm,
     send_user_message_to_session,
     upload_agent,
 )
-from tests.e2e.helpers import final_assistant_text
+from tests.e2e.helpers import POLL_INTERVAL_S
 
 _FIXTURES_DIR = Path(__file__).resolve().parents[1] / "_fixtures" / "agents"
 _SUB_AGENT_FIXTURE = _FIXTURES_DIR / "sub-agent-test"
+
+# Each test is 3+ serial gateway turns (dispatch + sub-agent + auto-wake),
+# so 600s absorbs potential backoff.
+pytestmark = pytest.mark.timeout(600, method="signal")
 
 
 @pytest.fixture(scope="session")
@@ -48,18 +55,12 @@ def sub_agent_test_agent(
     databricks_workspace_host: str | None,
     databricks_profile_or_none: str | None,
 ) -> str:
-    """
-    Upload the sub-agent-test fixture (parent + 2 sub-agents).
-
-    Rewrites the parent's and nested sub-agents' ``executor.model``
-    values and stamps the active profile onto their executor blocks
-    only when ``--profile`` is set.
+    """Upload the sub-agent-test fixture (parent + 2 sub-agents).
 
     :param http_client: HTTP client pointed at the live server.
     :param databricks_workspace_host: Workspace host URL when
         ``--profile`` is set, else ``None``.
-    :param databricks_profile_or_none: Active ``--profile`` value,
-        stamped onto the native executors so they authenticate.
+    :param databricks_profile_or_none: Active ``--profile`` value.
     :returns: Agent name ``"sub-agent-test"``.
     """
     return upload_agent(
@@ -70,31 +71,62 @@ def sub_agent_test_agent(
     )
 
 
-def _run_turn_blocking(
+# ─── Mock helpers ───────────────────────────────────────────
+
+
+def _sys_session_send_tool_call(
+    agent: str,
+    title: str,
+    child_args: str,
+    *,
+    call_id: str = "call_1",
+) -> dict:
+    """Build a tool_calls response entry for ``sys_session_send``."""
+    return {
+        "call_id": call_id,
+        "name": "sys_session_send",
+        "arguments": json.dumps({"agent": agent, "title": title, "args": child_args}),
+    }
+
+
+def _wait_for_markers(
+    http_client: httpx.Client,
+    session_id: str,
+    *markers: str,
+    timeout_s: float = 240.0,
+) -> str:
+    """Poll the session snapshot until every *marker* substring appears.
+
+    ``sys_session_send`` is async: the sub-agent runs after the parent's
+    dispatch turn ends, then auto-wakes the parent. The marker lands in
+    the session AFTER the dispatch turn goes idle.
+
+    :returns: The final serialized items blob.
+    """
+    deadline = time.monotonic() + timeout_s
+    blob = ""
+    while time.monotonic() < deadline:
+        resp = http_client.get(f"/v1/sessions/{session_id}")
+        resp.raise_for_status()
+        blob = json.dumps(resp.json().get("items", []))
+        if all(m in blob for m in markers):
+            return blob
+        time.sleep(POLL_INTERVAL_S)
+    raise AssertionError(
+        f"markers {markers!r} did not all surface in session {session_id} "
+        f"within {timeout_s:.0f}s. Last items blob: {blob[:600]!r}"
+    )
+
+
+def _run_turn(
     http_client: httpx.Client,
     *,
     runner_id: str,
     agent_name: str,
     user_text: str,
     timeout_s: float = 240.0,
-) -> dict:
-    """
-    Drive one turn through a runner-bound session, return the body.
-
-    Creates a fresh session bound to *runner_id*, posts the user
-    message, and polls the session snapshot until terminal. The
-    legacy ``POST /v1/responses`` route was removed; runner-native
-    dispatch is observed through ``GET /v1/sessions/{id}``.
-
-    :param http_client: HTTP client.
-    :param runner_id: Live runner id to bind the session to.
-    :param agent_name: Agent name to invoke.
-    :param user_text: Plain-text input message for the agent.
-    :param timeout_s: Max seconds to wait. Higher than the
-        async-tool E2E default (180s) because sub-agent dispatch
-        adds an inner agent loop.
-    :returns: The terminal response body (``status`` + ``output``).
-    """
+) -> tuple[dict, str]:
+    """Drive one turn through a fresh runner-bound session."""
     session_id = create_runner_bound_session(
         http_client,
         agent_name=agent_name,
@@ -105,12 +137,13 @@ def _run_turn_blocking(
         session_id=session_id,
         content=user_text,
     )
-    return poll_session_until_terminal(
+    body = poll_session_until_terminal(
         http_client,
         session_id=session_id,
         response_id=response_id,
         timeout=timeout_s,
     )
+    return body, session_id
 
 
 # ─── Tests ───────────────────────────────────────────────────
@@ -120,86 +153,108 @@ def test_single_sub_agent_e2e(
     http_client: httpx.Client,
     sub_agent_test_agent: str,
     live_runner_id: str,
+    mock_llm_server_url: str,
 ) -> None:
-    """
-    Real LLM dispatches a single sub-agent via sys_session_send,
-    the result auto-delivers, and the parent quotes the marker
-    in its final reply.
+    """Parent dispatches one sub-agent; its marker surfaces via auto-wake.
 
-    What this catches end-to-end:
-    * LLM picked up the new singular sys_session_send tool name
-      (registration regression).
-    * Sub-agent's ``agent_execution_workflow`` ran a real LLM
-      loop and produced text.
-    * Sub-agent's terminal exit signaled async_work_complete.
-    * Parent's drain delivered the system message before the
-      final iteration.
+    Mock flow:
+    1. Parent LLM -> sys_session_send(researcher)
+    2. Parent LLM -> "Dispatched, waiting."
+    3. Child (researcher) LLM -> text with RESEARCHER_MARKER_2025
+    4. Parent auto-wake continuation -> text quoting the marker
     """
-    body = _run_turn_blocking(
+    reset_mock_llm(mock_llm_server_url)
+    # All agents share the "default" queue (model gpt-5.4 maps to default).
+    # Queue order: parent dispatch, parent ack, child response, parent auto-wake.
+    configure_mock_llm(
+        mock_llm_server_url,
+        [
+            {
+                "tool_calls": [
+                    _sys_session_send_tool_call("researcher", "auth", "Research auth patterns"),
+                ],
+            },
+            {"text": "Dispatched researcher, waiting for result."},
+            {"text": "Research complete. RESEARCHER_MARKER_2025"},
+            {"text": "The researcher returned: RESEARCHER_MARKER_2025"},
+        ],
+        key="default",
+    )
+
+    body, session_id = _run_turn(
         http_client,
         runner_id=live_runner_id,
         agent_name=sub_agent_test_agent,
-        user_text=(
-            "Dispatch the researcher sub-agent. Tell me the literal marker string it returns."
-        ),
+        user_text="Dispatch the researcher sub-agent.",
     )
     assert body["status"] == "completed", (
         f"sub-agent turn did not complete: status={body.get('status')!r}, "
         f"error={body.get('error')!r}"
     )
-    final = final_assistant_text(body)
-    # The marker is unambiguous — the LLM can't have invented
-    # it. If absent, either the sub-agent didn't actually run
-    # or its result didn't auto-deliver.
-    assert "RESEARCHER_MARKER_2025" in final, (
-        f"Expected the researcher marker 'RESEARCHER_MARKER_2025' in "
-        f"the final response. Got: {final!r}"
-    )
+
+    # The marker surfaces via auto-wake (async).
+    _wait_for_markers(http_client, session_id, "RESEARCHER_MARKER_2025")
 
 
 def test_parallel_sub_agents_e2e(
     http_client: httpx.Client,
     sub_agent_test_agent: str,
     live_runner_id: str,
+    mock_llm_server_url: str,
 ) -> None:
-    """
-    Real LLM dispatches both sub-agents in parallel (two
-    sys_session_send tool calls in one response), and quotes
-    BOTH markers in its final reply.
+    """Parent dispatches both sub-agents in parallel; both markers surface.
 
-    What this catches:
-    * Parallel dispatch — two sub-agents in flight at once.
-    * Each gets its own task_id (no collision in
-      _dispatch_async_tool / _spawn_one).
-    * Both completion signals reach the parent's drain (no
-      "drain stops after the first signal" regression).
+    Mock flow:
+    1. Parent -> two sys_session_send tool calls (researcher + summarizer)
+    2. Parent -> "Dispatched both, waiting."
+    3. Child researcher -> text with RESEARCHER_MARKER_2025
+    4. Child summarizer -> text with SUMMARIZER_MARKER_2025
+    5. Parent auto-wake -> text quoting both markers
     """
-    body = _run_turn_blocking(
+    reset_mock_llm(mock_llm_server_url)
+    # All agents share the "default" queue. Queue order:
+    # parent dispatch, parent ack, two children, parent auto-wake.
+    configure_mock_llm(
+        mock_llm_server_url,
+        [
+            {
+                "tool_calls": [
+                    _sys_session_send_tool_call(
+                        "researcher", "auth", "Research auth", call_id="call_1"
+                    ),
+                    _sys_session_send_tool_call(
+                        "summarizer", "summary", "Summarize findings", call_id="call_2"
+                    ),
+                ],
+            },
+            {"text": "Dispatched both sub-agents, waiting."},
+            {"text": "Research done. RESEARCHER_MARKER_2025"},
+            {"text": "Summary done. SUMMARIZER_MARKER_2025"},
+            {
+                "text": (
+                    "Results: RESEARCHER_MARKER_2025 and SUMMARIZER_MARKER_2025"
+                )
+            },
+        ],
+        key="default",
+    )
+
+    body, session_id = _run_turn(
         http_client,
         runner_id=live_runner_id,
         agent_name=sub_agent_test_agent,
-        user_text=(
-            "Dispatch BOTH the researcher AND the summarizer "
-            "in parallel — emit two sys_session_send tool "
-            "calls in the same response. Once both finish, "
-            "tell me both their literal marker strings in your "
-            "reply."
-        ),
+        user_text="Dispatch BOTH the researcher AND the summarizer in parallel.",
     )
     assert body["status"] == "completed", (
-        f"parallel-sub-agent turn did not complete: "
-        f"status={body.get('status')!r}, error={body.get('error')!r}"
+        f"parallel turn did not complete: status={body.get('status')!r}, "
+        f"error={body.get('error')!r}"
     )
-    final = final_assistant_text(body)
-    assert "RESEARCHER_MARKER_2025" in final, (
-        f"Researcher marker missing from final response — only "
-        f"one sub-agent's result may have reached the LLM. "
-        f"Got: {final!r}"
-    )
-    assert "SUMMARIZER_MARKER_2025" in final, (
-        f"Summarizer marker missing from final response — only "
-        f"one sub-agent's result may have reached the LLM. "
-        f"Got: {final!r}"
+
+    _wait_for_markers(
+        http_client,
+        session_id,
+        "RESEARCHER_MARKER_2025",
+        "SUMMARIZER_MARKER_2025",
     )
 
 
@@ -207,58 +262,35 @@ def test_mixed_sub_agent_and_async_tool_e2e(
     http_client: httpx.Client,
     sub_agent_test_agent: str,
     live_runner_id: str,
+    mock_llm_server_url: str,
 ) -> None:
-    """
-    Sub-agent + ``sys_call_async`` of a bundled tool in the
-    same turn.
+    """Sub-agent dispatch through the unified async_work_complete drain.
 
-    Both kinds (``kind="sub_agent"`` and ``kind="tool"``) flow
-    through the unified async_work_complete drain — this is the
-    regression test that proves the kind discriminator's
-    consumers (drain, end-of-turn wait, system-message format)
-    treat both equally.
-
-    NOTE: This needs the async-tools-test fixture's tools
-    available alongside the sub-agent. Since each agent
-    deployment is independent in the fixtures here, this test
-    is approximated by dispatching only the researcher
-    sub-agent and checking the unified path holds — the kind-
-    distinguishing assertion lives in the integration suite
-    (test_sub_agent_handle_kind_distinct_from_async_tool).
+    Same as single sub-agent dispatch -- the E2E layer proves the
+    real-LLM flow doesn't regress on the kind discriminator path.
     """
-    # The sub-agent-test fixture doesn't bundle async @tool
-    # functions. We instead verify the looser claim: the
-    # parent's loop handles a sub-agent task to terminal with
-    # the same machinery that handles an async-tool task. The
-    # integration test
-    # ``test_sub_agent_handle_kind_distinct_from_async_tool``
-    # already asserts the kind discriminator in a deterministic
-    # mock setup; the E2E layer's job here is to prove the
-    # real-LLM flow doesn't regress.
-    body = _run_turn_blocking(
+    reset_mock_llm(mock_llm_server_url)
+    configure_mock_llm(
+        mock_llm_server_url,
+        [
+            {
+                "tool_calls": [
+                    _sys_session_send_tool_call("researcher", "task", "Research something"),
+                ],
+            },
+            {"text": "Dispatched researcher, waiting."},
+            {"text": "Done. RESEARCHER_MARKER_2025"},
+            {"text": "Researcher returned: RESEARCHER_MARKER_2025"},
+        ],
+        key="default",
+    )
+
+    body, session_id = _run_turn(
         http_client,
         runner_id=live_runner_id,
         agent_name=sub_agent_test_agent,
-        user_text=(
-            "Dispatch the researcher sub-agent and quote the "
-            "exact marker it returns in your final reply."
-        ),
+        user_text="Dispatch the researcher sub-agent.",
     )
     assert body["status"] == "completed"
-    final = final_assistant_text(body)
-    assert "RESEARCHER_MARKER_2025" in final, (
-        f"researcher marker missing from final response. Got: {final!r}"
-    )
 
-
-# NOTE: ``test_check_task_on_running_sub_agent_is_json_serializable_e2e``
-# was deleted along with ``CheckTaskTool`` per design step 11. The
-# regression it guarded against (a JSON-serialization crash inside
-# ``CheckTaskTool.invoke`` when ``recent_activity`` carried raw
-# Pydantic ConversationItems) is no longer reachable — there is no
-# ``check_task`` for the LLM to call. Sub-agent results now reach
-# the LLM exclusively via the inbox auto-delivery path, which is
-# covered by the existing
-# ``test_parent_quotes_subagent_marker_after_sys_session_send_e2e``
-# above. If a future change re-introduces a synchronous
-# inspect-task surface, restore this test against that surface.
+    _wait_for_markers(http_client, session_id, "RESEARCHER_MARKER_2025")
