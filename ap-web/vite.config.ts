@@ -1,9 +1,12 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import type { ProxyOptions } from "vite";
+import type { Plugin, ProxyOptions } from "vite";
 import { defineConfig } from "vitest/config";
+
+import { computeBuildVersion } from "./src/lib/buildVersion";
 
 const OMNIGENT_URL = process.env.OMNIGENT_URL ?? "http://localhost:6767";
 
@@ -123,8 +126,68 @@ if (useAuth) {
 
 const proxyConfig = createProxyConfig(OMNIGENT_URL, useAuth);
 
+// PWA web app manifest. Static (the app's identity doesn't change per build);
+// emitted by the plugin below — NOT placed in `public/`, because `public/` is
+// copied into the embed-island build too (vite.embed.config.ts), and the embed
+// must never ship a manifest/SW (it loads inside a host app's origin). `id` is
+// pinned independent of a future `start_url` change so the browser keeps
+// treating reinstalls/updates as the same app.
+const PWA_MANIFEST = {
+  id: "/",
+  name: "Omnigent",
+  short_name: "Omnigent",
+  description: "Omnigent — a common layer over coding agents.",
+  start_url: "/",
+  scope: "/",
+  display: "standalone",
+  orientation: "any",
+  theme_color: "#0d1218",
+  background_color: "#0d1218",
+  icons: [
+    { src: "/pwa-192.png", sizes: "192x192", type: "image/png" },
+    { src: "/pwa-512.png", sizes: "512x512", type: "image/png" },
+    { src: "/pwa-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+  ],
+};
+
+/**
+ * Emit the PWA assets for the standalone build: `version.json`,
+ * `manifest.webmanifest`, and a `sw.js` whose `__BUILD_VERSION__` token is
+ * replaced with a fingerprint of this build's hashed JS/CSS outputs
+ * (`computeBuildVersion`). That fingerprint makes `sw.js` change on every
+ * code/style deploy, which is what fires the in-app update prompt. Registered
+ * ONLY here (not in `vite.embed.config.ts`), so the embed island ships neither
+ * a service worker nor a manifest. `apply: "build"` keeps `npm run dev`
+ * service-worker-free.
+ */
+function emitPwaAssets(): Plugin {
+  return {
+    name: "emit-pwa-assets",
+    apply: "build",
+    generateBundle(_options, bundle) {
+      const build = computeBuildVersion(Object.keys(bundle));
+      const swSource = readFileSync(path.resolve(__dirname, "sw-src/sw.js"), "utf8");
+      this.emitFile({
+        type: "asset",
+        fileName: "version.json",
+        source: JSON.stringify({ build }),
+      });
+      this.emitFile({
+        type: "asset",
+        fileName: "manifest.webmanifest",
+        source: JSON.stringify(PWA_MANIFEST),
+      });
+      this.emitFile({
+        type: "asset",
+        fileName: "sw.js",
+        source: swSource.replace("__BUILD_VERSION__", build),
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [emitPwaAssets(), react(), tailwindcss()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

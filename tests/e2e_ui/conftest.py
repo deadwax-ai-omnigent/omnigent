@@ -32,7 +32,9 @@ pytest tmp dir so the test never touches the user's default
 from __future__ import annotations
 
 import io
+import json
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -394,6 +396,57 @@ def _find_free_port() -> int:
     )
 
 
+def _assert_pwa_build(build_output: Path) -> None:
+    """Fail if the built SPA is missing the PWA outputs or the SW won't update.
+
+    The standalone build must ship the installable-PWA assets, and the
+    hand-rolled service worker must (a) embed the per-build fingerprint so its
+    bytes change every deploy — or the update prompt never fires — and (b) NOT
+    cache or serve the app shell: Omnigent is a cloud app, so a stale cached
+    shell would white-screen users after every deploy.
+    """
+    for name in ("index.html", "sw.js", "manifest.webmanifest", "version.json"):
+        if not (build_output / name).is_file():
+            pytest.fail(f"SPA build is missing {name} at {build_output}")
+    build = json.loads((build_output / "version.json").read_text(encoding="utf-8")).get("build")
+    sw = (build_output / "sw.js").read_text(encoding="utf-8")
+    if not build or build not in sw:
+        pytest.fail(
+            "sw.js does not embed the version.json build fingerprint — the PWA "
+            "update prompt would never fire on a JS-only deploy"
+        )
+    # Installability-only contract — enforce the *dangerous* direction too, not
+    # just "the fingerprint is present". The service worker must NOT precache or
+    # serve the app shell or intercept navigations; otherwise a deploy
+    # white-screens users behind a stale shell. Strip line comments first so
+    # prose that mentions these tokens can neither fake nor mask a regression.
+    sw_code = re.sub(r"//[^\n]*", "", sw)
+    if "index.html" in sw_code:
+        pytest.fail("sw.js references index.html — it must not cache or serve the app shell")
+    shell_precache = re.search(r"(?:cache\.add|addAll|precache)[^\n]*\.(?:js|html)\b", sw_code)
+    if shell_precache is not None:
+        pytest.fail(
+            f"sw.js precaches an app-shell asset ({shell_precache.group(0)}) — "
+            "it must precache only version.json"
+        )
+    # The architecture rests on "navigations always hit the network": the SW may
+    # call respondWith() ONLY in the /version.json branch. A fetch handler that
+    # serves navigations (or the shell) from cache would pass every check above
+    # yet white-screen users behind a stale shell after each deploy — so guard it
+    # both by marker and structurally (every respondWith must be /version.json's).
+    if re.search(r"request\.mode|NavigationRoute|navigationPreload", sw_code):
+        pytest.fail(
+            "sw.js inspects navigation requests — navigations must always reach "
+            "the network (a stale cached shell white-screens users after a deploy)"
+        )
+    for match in re.finditer(r"respondWith", sw_code):
+        if "version.json" not in sw_code[max(0, match.start() - 200) : match.start()]:
+            pytest.fail(
+                "sw.js calls respondWith() outside a /version.json branch — the "
+                "service worker must not serve the app shell or intercept navigations"
+            )
+
+
 @pytest.fixture(scope="session")
 def built_spa(request: pytest.FixtureRequest) -> None:
     """
@@ -415,11 +468,7 @@ def built_spa(request: pytest.FixtureRequest) -> None:
     if request.config.getoption("--ui-base-url"):
         return
     if request.config.getoption("--ui-skip-build"):
-        if not (_BUILD_OUTPUT / "index.html").is_file():
-            pytest.fail(
-                f"--ui-skip-build was passed but no SPA build exists at "
-                f"{_BUILD_OUTPUT}. Run `cd ap-web && npm run build` first."
-            )
+        _assert_pwa_build(_BUILD_OUTPUT)
         return
 
     lock_path = _AP_WEB_DIR / ".build.lock"
@@ -435,6 +484,8 @@ def built_spa(request: pytest.FixtureRequest) -> None:
             check=True,
         )
         subprocess.run(["npm", "run", "build"], cwd=_AP_WEB_DIR, check=True)
+
+    _assert_pwa_build(_BUILD_OUTPUT)
 
 
 def _spawn_runner_against_external_server(
