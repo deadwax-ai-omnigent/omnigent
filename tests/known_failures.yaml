@@ -287,12 +287,6 @@ skips:
     cluster: subagent-supervisor-routing
     mode: skip
 
-  - id: tests/e2e/test_policies_e2e.py::test_streaming_api_explicit_approval_allows_llm
-    reason: "Shard 3 bulk: streaming-API explicit approval. Policy / approval cluster."
-    issue: 476
-    cluster: policy-guardrails
-    mode: skip
-
   - id: tests/e2e/test_repl_approval_e2e.py::test_repl_output_ask_approve_surfaces_llm_reply
     reason: "Shard 3 bulk: REPL output ask-approve family."
     issue: 532
@@ -457,18 +451,6 @@ skips:
     reason: "Nightly bulk: claude-coder client-tool park."
     issue: 532
     cluster: async-dispatch-inbox-sse
-    mode: skip
-
-  - id: tests/e2e/test_policies_e2e.py::test_streaming_api_explicit_decline_denies
-    reason: "Nightly bulk: policy cluster (409 conflict / SSE content-type mismatch)."
-    issue: 532
-    cluster: policy-guardrails
-    mode: skip
-
-  - id: tests/e2e/test_policies_e2e.py::test_streaming_api_malformed_verdict_rejected_by_route
-    reason: "Nightly bulk: policy cluster (409 conflict / SSE content-type mismatch)."
-    issue: 532
-    cluster: policy-guardrails
     mode: skip
 
   - id: tests/e2e/test_web_search_async_dispatch_e2e.py::test_web_search_async_dispatch_completes_on_non_openai_model
