@@ -672,7 +672,6 @@ def test_repl_approve_always_caches_for_later_turns(
 def test_repl_tool_call_approval_allows_tool_to_run(
     ap_cli: str,
     repl_env: dict[str, str],
-    mock_llm_server_url: str,
     using_mock_llm: bool,
 ) -> None:
     """
@@ -692,19 +691,6 @@ def test_repl_tool_call_approval_allows_tool_to_run(
     """
     if using_mock_llm:
         pytest.skip("requires real LLM (tool/subagent mock not supported in REPL)")
-    # LLM call 1: emit a tool call to ``echo``.
-    # LLM call 2: after tool result, return text including the output.
-    _configure_mock_tool_then_text(
-        mock_llm_server_url,
-        tool_calls=[
-            {
-                "call_id": "call-echo-1",
-                "name": "echo",
-                "arguments": '{"message": "testing123"}',
-            }
-        ],
-        follow_up_text="The echo tool returned: echo: testing123",
-    )
     child = pexpect.spawn(
         ap_cli,
         ["run", str(_TOOL_GATE_DIR)],
@@ -757,7 +743,6 @@ def test_repl_tool_call_approval_allows_tool_to_run(
 def test_repl_tool_call_refusal_blocks_tool(
     ap_cli: str,
     repl_env: dict[str, str],
-    mock_llm_server_url: str,
     using_mock_llm: bool,
 ) -> None:
     """
@@ -773,20 +758,6 @@ def test_repl_tool_call_refusal_blocks_tool(
     """
     if using_mock_llm:
         pytest.skip("requires real LLM (tool/subagent mock not supported in REPL)")
-    # LLM call 1: emit tool call. After refusal the tool output is
-    # replaced with a DENY sentinel. LLM call 2: sees the sentinel
-    # and relays the denial.
-    _configure_mock_tool_then_text(
-        mock_llm_server_url,
-        tool_calls=[
-            {
-                "call_id": "call-echo-2",
-                "name": "echo",
-                "arguments": '{"message": "testing456"}',
-            }
-        ],
-        follow_up_text="The tool was denied by policy.",
-    )
     child = pexpect.spawn(
         ap_cli,
         ["run", str(_TOOL_GATE_DIR)],
@@ -843,7 +814,6 @@ def test_repl_tool_call_refusal_blocks_tool(
 def test_repl_subagent_ask_tunnels_approval_to_root(
     ap_cli: str,
     repl_env: dict[str, str],
-    mock_llm_server_url: str,
     using_mock_llm: bool,
 ) -> None:
     """
@@ -869,19 +839,6 @@ def test_repl_subagent_ask_tunnels_approval_to_root(
     """
     if using_mock_llm:
         pytest.skip("requires real LLM (tool/subagent mock not supported in REPL)")
-    # Sub-agent tests: both parent and worker use gpt-4o, so all
-    # LLM calls hit the same "default" queue. Sequence:
-    # 1. Parent LLM: emit tool_call to spawn worker sub-agent
-    # 2. Worker LLM: respond with text (after approval)
-    # 3. Parent LLM: summarize the worker's reply
-    reset_mock_llm(mock_llm_server_url)
-    configure_mock_llm(
-        mock_llm_server_url,
-        [
-            {"text": "Hello from the worker!"},
-            {"text": "The worker said hello."},
-        ],
-    )
     child = pexpect.spawn(
         ap_cli,
         ["run", str(_SUBAGENT_GATE_DIR)],
@@ -1127,7 +1084,6 @@ def test_repl_label_driven_ask_refuse_shows_sentinel(
 def test_repl_output_ask_approve_surfaces_llm_reply(
     ap_cli: str,
     repl_env: dict[str, str],
-    mock_llm_server_url: str,
     using_mock_llm: bool,
 ) -> None:
     """
@@ -1140,7 +1096,6 @@ def test_repl_output_ask_approve_surfaces_llm_reply(
     """
     if using_mock_llm:
         pytest.skip("requires real LLM (tool/subagent mock not supported in REPL)")
-    _configure_mock_text(mock_llm_server_url, ["Hi there, how are you?"])
     child = pexpect.spawn(
         ap_cli,
         ["run", str(_OUTPUT_GATE_DIR)],
@@ -1199,7 +1154,6 @@ def test_repl_output_ask_approve_surfaces_llm_reply(
 def test_repl_output_ask_refuse_replaces_reply_with_sentinel(
     ap_cli: str,
     repl_env: dict[str, str],
-    mock_llm_server_url: str,
     using_mock_llm: bool,
 ) -> None:
     """
@@ -1213,9 +1167,6 @@ def test_repl_output_ask_refuse_replaces_reply_with_sentinel(
     """
     if using_mock_llm:
         pytest.skip("requires real LLM (tool/subagent mock not supported in REPL)")
-    # The LLM generates a reply, but OUTPUT refuse replaces it
-    # with the DENY sentinel before persisting.
-    _configure_mock_text(mock_llm_server_url, ["Hi there, how are you?"])
     child = pexpect.spawn(
         ap_cli,
         ["run", str(_OUTPUT_GATE_DIR)],
@@ -1265,7 +1216,6 @@ def test_repl_output_ask_refuse_replaces_reply_with_sentinel(
 def test_repl_tool_result_ask_approve_surfaces_tool_output(
     ap_cli: str,
     repl_env: dict[str, str],
-    mock_llm_server_url: str,
     using_mock_llm: bool,
 ) -> None:
     """
@@ -1278,20 +1228,6 @@ def test_repl_tool_result_ask_approve_surfaces_tool_output(
     """
     if using_mock_llm:
         pytest.skip("requires real LLM (tool/subagent mock not supported in REPL)")
-    # LLM call 1: emit tool call to echo. Tool dispatches freely
-    # (TOOL_RESULT fires after). LLM call 2: after approved tool
-    # result, include it in reply.
-    _configure_mock_tool_then_text(
-        mock_llm_server_url,
-        tool_calls=[
-            {
-                "call_id": "call-echo-3",
-                "name": "echo",
-                "arguments": '{"message": "pineapple"}',
-            }
-        ],
-        follow_up_text="The echo tool said: echo: pineapple",
-    )
     child = pexpect.spawn(
         ap_cli,
         ["run", str(_TOOL_RESULT_GATE_DIR)],
@@ -1347,7 +1283,6 @@ def test_repl_tool_result_ask_approve_surfaces_tool_output(
 def test_repl_tool_result_ask_refuse_replaces_output(
     ap_cli: str,
     repl_env: dict[str, str],
-    mock_llm_server_url: str,
     using_mock_llm: bool,
 ) -> None:
     """
@@ -1361,19 +1296,6 @@ def test_repl_tool_result_ask_refuse_replaces_output(
     """
     if using_mock_llm:
         pytest.skip("requires real LLM (tool/subagent mock not supported in REPL)")
-    # Tool dispatches, result refused → sentinel replaces output.
-    # LLM call 2 sees the sentinel.
-    _configure_mock_tool_then_text(
-        mock_llm_server_url,
-        tool_calls=[
-            {
-                "call_id": "call-echo-4",
-                "name": "echo",
-                "arguments": '{"message": "mangosteen"}',
-            }
-        ],
-        follow_up_text="The tool result was denied by policy.",
-    )
     child = pexpect.spawn(
         ap_cli,
         ["run", str(_TOOL_RESULT_GATE_DIR)],
@@ -1423,7 +1345,6 @@ def test_repl_tool_result_ask_refuse_replaces_output(
 def test_repl_subagent_tool_call_ask_tunnels_to_root(
     ap_cli: str,
     repl_env: dict[str, str],
-    mock_llm_server_url: str,
     using_mock_llm: bool,
 ) -> None:
     """
@@ -1443,29 +1364,6 @@ def test_repl_subagent_tool_call_ask_tunnels_to_root(
     """
     if using_mock_llm:
         pytest.skip("requires real LLM (tool/subagent mock not supported in REPL)")
-    # Sub-agent tool-call test. Both parent and toolworker use
-    # gpt-4o → same default queue. Sequence:
-    # 1. Toolworker LLM: emit tool_call to echo (after approval)
-    # 2. Toolworker LLM: text reply including tool output
-    # 3. Parent LLM: summarize the toolworker's reply
-    # Extra responses as buffer for any additional LLM calls.
-    reset_mock_llm(mock_llm_server_url)
-    configure_mock_llm(
-        mock_llm_server_url,
-        [
-            {
-                "tool_calls": [
-                    {
-                        "call_id": "call-echo-sub",
-                        "name": "echo",
-                        "arguments": '{"message": "durian"}',
-                    }
-                ]
-            },
-            {"text": "The echo tool returned: echo: durian"},
-            {"text": "The worker echoed the word durian."},
-        ],
-    )
     child = pexpect.spawn(
         ap_cli,
         ["run", str(_SUBAGENT_TOOL_GATE_DIR)],
