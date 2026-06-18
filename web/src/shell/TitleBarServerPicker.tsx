@@ -90,7 +90,7 @@ export function TitleBarServerPicker({
           title="Switch server"
         >
           <span className="truncate font-medium">
-            {threadTitle || "Omnigent"} — {hostOf(info.currentOrigin)}
+            {threadTitle || "Deadwax"} — {hostOf(info.currentOrigin)}
           </span>
           <ChevronDownIcon className="size-3 shrink-0" />
         </DropdownMenuTrigger>
