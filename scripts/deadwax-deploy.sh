@@ -16,7 +16,14 @@ cd "$FORK_DIR/ap-web"
 npm run build   # vite outputs to ../omnigent/server/static/web-ui
 
 FORK_UI="$FORK_DIR/omnigent/server/static/web-ui"
-PKG_UI="$(python3 -c 'import omnigent,os;print(os.path.join(os.path.dirname(omnigent.__file__),"server","static","web-ui"))')"
+# Resolve the active install's web-ui. omnigent runs under uv's python (3.12),
+# not the system python3 — so locate the uv-tool install directly rather than
+# `python3 -c 'import omnigent'` (which fails: ModuleNotFoundError under 3.9).
+PKG_UI="$(ls -d "$HOME"/.local/share/uv/tools/omnigent/lib/python*/site-packages/omnigent/server/static/web-ui 2>/dev/null | head -1)"
+if [ -z "$PKG_UI" ]; then
+  PKG_UI="$(uv tool run --from omnigent python -c 'import omnigent,os;print(os.path.join(os.path.dirname(omnigent.__file__),"server","static","web-ui"))' 2>/dev/null)"
+fi
+[ -n "$PKG_UI" ] || { echo "ERROR: could not locate the active omnigent web-ui dir" >&2; exit 1; }
 echo "==> Serving branded UI from active install: $PKG_UI"
 [ -d "$PKG_UI.upstream-bak" ] || cp -R "$PKG_UI" "$PKG_UI.upstream-bak"
 rm -rf "$PKG_UI"
