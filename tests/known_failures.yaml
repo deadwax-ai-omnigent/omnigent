@@ -78,12 +78,6 @@ skips:
     cluster: repl-pexpect-cli
     mode: skip
 
-  - id: tests/e2e/test_sys_terminal_e2e.py::test_sys_terminal_send_keys_drives_interactive_e2e
-    reason: "Drives the removed /v1/responses route; re-home to the sessions API in a later batch."
-    issue: 532
-    cluster: terminal-d6
-    mode: skip
-
   - id: tests/e2e/test_async_tools_e2e.py::test_async_tool_real_llm_e2e
     reason: "Shard 0 bulk: async tool real-LLM assertion failure. Triage under #532."
     issue: 532
@@ -260,12 +254,6 @@ skips:
     cluster: run-ap-examples-harness
     mode: skip
 
-  - id: tests/e2e/test_sys_terminal_e2e.py::test_sys_terminal_basic_round_trip_e2e
-    reason: "Shard 3 bulk: sys-terminal basic round-trip. Same sys-terminal family."
-    issue: 532
-    cluster: terminal-d6
-    mode: skip
-
   - id: tests/e2e/omnigent/test_run_omnigent_example_agents.py::test_run_omnigent_example_yaml[agent_with_subagent_session]
     reason: "Shard 3 bulk: run_omnigent example-yaml agent_with_subagent_session."
     issue: 532
@@ -337,12 +325,6 @@ skips:
     reason: "Follow-up: delayed_echo marker missing; inbox empty when test expected the async result."
     issue: 532
     cluster: async-dispatch-inbox-sse
-    mode: skip
-
-  - id: tests/e2e/test_sys_terminal_e2e.py::test_sys_terminal_full_workflow_e2e
-    reason: "Follow-up: sys-terminal full workflow. sys-terminal cluster."
-    issue: 532
-    cluster: terminal-d6
     mode: skip
 
   - id: tests/e2e/omnigent/test_repl_session_lifecycle.py::test_repl_effort_command_persists_session_metadata
