@@ -1,10 +1,11 @@
 # Sourced by evaluate-checks.sh. The unit/lint/type-check checks gate every PR.
 # The e2e + e2e-ui suites also gate PRs, but only run with secrets on same-repo
 # PRs (maintainer branches); fork PRs cannot read the LLM_API_KEY /
-# GATEWAY_BASE_URL secrets, so their e2e jobs skip via a workflow fork guard.
+# GATEWAY_BASE_URL secrets, so their e2e jobs skip via a workflow fork guard
+# until a maintainer approves the PR (which triggers the fork-e2e mirror).
 # The e2e and integration check names are therefore in BOTH REQUIRED (a
 # same-repo PR must pass them) and ALLOW_SKIP (a fork PR's skipped check still
-# satisfies the gate).
+# satisfies the CI gate; the merge gate separately blocks on missing approval).
 # Generated file -- do not hand-edit; it is replaced wholesale on every sync.
 
 REQUIRED=(

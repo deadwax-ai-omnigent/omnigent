@@ -9,7 +9,7 @@ name: Rerun Security Gate Run
 # `Security Gate` job failed -- so a workflow that already self-triggered on the
 # label (ci/e2e trigger on `labeled` for force-all-tests etc.) is in-progress or
 # green and skipped, avoiding a double-run. fork-e2e-mirror is excluded: it is
-# e2e-approved-driven mirror plumbing with branch side effects, not a
+# approval-driven mirror plumbing with branch side effects, not a
 # gate-mirroring check.
 #
 # The triggering run may have been initiated by an untrusted fork PR, so the

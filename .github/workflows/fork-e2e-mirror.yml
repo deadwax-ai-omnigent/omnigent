@@ -4,43 +4,54 @@ name: Fork e2e mirror
 # there as a `push` (with secrets). It's a pure git-ref update via a GitHub App
 # token (refs pushed by the default GITHUB_TOKEN don't trigger workflows); it
 # never checks out or runs fork code. Mirroring requires BOTH the contributor
-# Security Scan to pass (the blocking `gate` job, via security-gate.yml) AND the
-# `e2e-approved` label, present and applied by a maintainer (should-mirror.sh).
+# Security Scan to pass (the blocking `gate` job, via security-gate.yml) AND a
+# maintainer's approving PR review (should-mirror.sh).
 #
-# The `e2e-approved` label is the sole human gate for running secret-bearing e2e
-# on a fork PR. Only Triage+ users can apply labels, and the gate further
-# verifies the labeler is in .github/MAINTAINER, so an external fork author can
-# never open it. It is intentionally separate from the merge gate
-# (maintainer-approval.yml): labeling runs e2e but does NOT approve for merge,
-# and vice-versa. Removing the label (or closing the PR) tears down the mirror
-# branch and stops further secret runs.
+# Maintainer approval is the sole human gate for running secret-bearing e2e on a
+# fork PR. Only users with write access can submit approving reviews, and the
+# gate further verifies the approver is in .github/MAINTAINER, so an external
+# fork author can never open it. It is intentionally tied to the merge gate
+# (maintainer-approval.yml): approving the PR runs e2e AND approves for merge.
+# Requesting changes or dismissing the review stops future mirrors; closing the
+# PR tears down the mirror branch.
+#
+# Triggers:
+#   pull_request_target   opened/synchronize/reopened/closed — handles new
+#                         pushes and PR lifecycle. Reviews don't fire
+#                         pull_request_target, so approval reaches here via
+#                         workflow_dispatch (dispatched by
+#                         maintainer-approval-rerun-run.yml on approval).
+#   workflow_dispatch     re-evaluation of a single PR (used by the approval
+#                         relay and for manual re-runs).
 #
 # leak-scan-allow: pull_request_target
 on:
   pull_request_target:
-    # labeled/unlabeled so applying or removing `e2e-approved` opens or tears
-    # down the mirror immediately, not only on the PR's next push.
-    types: [opened, synchronize, reopened, closed, labeled, unlabeled]
+    types: [opened, synchronize, reopened, closed]
+
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number to evaluate for mirroring.
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: fork-e2e-mirror-${{ github.event.pull_request.number }}
+  group: fork-e2e-mirror-${{ github.event.pull_request.number || inputs.pr }}
   cancel-in-progress: false
 
 jobs:
-  # Delete the trusted mirror branch when the PR closes or the gate label is
-  # removed. Ungated -- cleanup must always run so a closed PR (or one whose
-  # approval was withdrawn) never leaves a stale fork-e2e/pr-N branch behind.
+  # Delete the trusted mirror branch when the PR closes. Ungated -- cleanup
+  # must always run so a closed PR never leaves a stale fork-e2e/pr-N branch.
   cleanup:
     name: cleanup
     if: >-
-      github.event.pull_request.head.repo.fork
-      && (
-        github.event.action == 'closed'
-        || (github.event.action == 'unlabeled' && github.event.label.name == 'e2e-approved')
-      )
+      github.event_name == 'pull_request_target'
+      && github.event.pull_request.head.repo.fork
+      && github.event.action == 'closed'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -67,40 +78,52 @@ jobs:
   # The single contributor Security Scan, consulted as a BLOCKING gate before we
   # mirror fork code onto a trusted branch where e2e runs WITH the gateway secret.
   # The scan itself runs once on the PR (security-scan.yml); this poller mirrors
-  # its result, blocking the mirror on a finding. Skipped on the teardown actions
-  # (handled by `cleanup`) and on label churn other than `e2e-approved`.
+  # its result, blocking the mirror on a finding. Skipped on the teardown action
+  # (handled by `cleanup`).
   gate:
     name: security gate
     if: >-
-      github.event.pull_request.head.repo.fork
-      && github.event.action != 'closed'
-      && github.event.action != 'unlabeled'
-      && (github.event.action != 'labeled' || github.event.label.name == 'e2e-approved')
+      (
+        github.event_name == 'workflow_dispatch'
+      ) || (
+        github.event_name == 'pull_request_target'
+        && github.event.pull_request.head.repo.fork
+        && github.event.action != 'closed'
+      )
     uses: ./.github/workflows/security-gate.yml
 
   mirror:
     name: mirror
     needs: gate
-    # Fork PRs only -- same-repo PRs run e2e directly via `pull_request`. Mirror
-    # only when not tearing down and (for label events) only for the gate label.
+    # Fork PRs only -- same-repo PRs run e2e directly via `pull_request`.
     if: >-
-      github.event.pull_request.head.repo.fork
-      && github.event.action != 'closed'
-      && github.event.action != 'unlabeled'
-      && (github.event.action != 'labeled' || github.event.label.name == 'e2e-approved')
+      (
+        github.event_name == 'workflow_dispatch'
+      ) || (
+        github.event_name == 'pull_request_target'
+        && github.event.pull_request.head.repo.fork
+        && github.event.action != 'closed'
+      )
     permissions:
       contents: read
-      issues: read          # read the labeled-by timeline (issues/N/events)
       pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
-      PR: ${{ github.event.pull_request.number }}
-      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-      MIRROR_BRANCH: fork-e2e/pr-${{ github.event.pull_request.number }}
+      PR: ${{ github.event.pull_request.number || inputs.pr }}
     steps:
+      - name: Resolve PR head SHA
+        id: ctx
+        run: |
+          if [[ -n "${{ github.event.pull_request.head.sha || '' }}" ]]; then
+            echo "sha=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            SHA=$(gh pr view "$PR" --repo "$REPO" --json headRefOid --jq '.headRefOid')
+            echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Check out gate scripts from main
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
@@ -116,7 +139,7 @@ jobs:
           app-id: ${{ vars.FORK_E2E_APP_ID }}
           private-key: ${{ secrets.FORK_E2E_APP_PRIVATE_KEY }}
 
-      # MAINTAINER@main, never the PR head: the gate verifies the *labeler* is a
+      # MAINTAINER@main, never the PR head: the gate verifies the *approver* is a
       # maintainer, so a PR can't self-grant by editing its own MAINTAINER copy.
       - name: Load maintainers
         id: maintainers
@@ -125,7 +148,6 @@ jobs:
       - name: Evaluate mirror gate
         id: gate
         env:
-          LABEL: e2e-approved
           MAINTAINERS: ${{ steps.maintainers.outputs.list }}
         run: bash .github/scripts/fork-e2e/should-mirror.sh
 
@@ -133,6 +155,8 @@ jobs:
         if: ${{ steps.gate.outputs.mirror == 'true' }}
         env:
           TOKEN: ${{ steps.app-token.outputs.token }}
+          HEAD_SHA: ${{ steps.ctx.outputs.sha }}
+          MIRROR_BRANCH: fork-e2e/pr-${{ env.PR }}
         run: |
           set -euo pipefail
           # Move git OBJECTS, don't just point a ref. A fork PR's head commit
