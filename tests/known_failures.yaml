@@ -541,22 +541,22 @@ skips:
   # ──────────────────────────────────────────────────────────────
   - id: tests/e2e/test_sub_agent_phase3_e2e.py::test_single_sub_agent_e2e
     reason: "Sub-agent result-delivery race: the parent turn replies before the spawned researcher sub-agent's result is drained back ('still waiting for the researcher sub-agent to complete'). Fails ~consistently in flake-stress (run 27761358025); NOT the old gateway empty-output."
-    issue: 532
+    issue: 682
     cluster: subagent-result-delivery
     mode: skip
   - id: tests/e2e/test_sub_agent_phase3_e2e.py::test_parallel_sub_agents_e2e
     reason: "Sub-agent result-delivery race: the parallel sub-agents' results are not all delivered before the parent replies ('results have not completed yet'). Fails ~consistently in flake-stress (run 27761358025)."
-    issue: 532
+    issue: 682
     cluster: subagent-result-delivery
     mode: skip
   - id: tests/e2e/test_sub_agent_phase3_e2e.py::test_mixed_sub_agent_and_async_tool_e2e
     reason: "Sub-agent result-delivery race: researcher sub-agent result never delivered before the parent replied. Fails in flake-stress (run 27761358025). Same family as its phase3 siblings."
-    issue: 532
+    issue: 682
     cluster: subagent-result-delivery
     mode: skip
   - id: tests/e2e/test_subagent_autowake_e2e.py::test_subagent_completion_auto_wakes_idle_parent
     reason: "Sub-agent autowake/drain low-rate flake (2/20 in flake-stress run 27761358025): sub-agent completion does not always wake the idle parent in time. Same family as the phase3 result-delivery race."
-    issue: 532
+    issue: 682
     cluster: subagent-result-delivery
     mode: skip
   - id: tests/e2e/test_subagent_autowake_e2e.py::test_subagent_completion_auto_wakes_parent_on_a_second_round
