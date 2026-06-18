@@ -187,7 +187,7 @@ import {
   parseMentionToken,
   rankMentionEntries,
 } from "@/lib/composerMentions";
-import { OttoEyes } from "@/components/OttoEyes";
+import { SkullSpinner } from "@/components/SkullSpinner";
 import { SkillPills } from "@/components/SkillPills";
 import { ComposerMicButton } from "@/components/ComposerMicButton";
 import type { CostControlMode } from "@/components/CostRoutingControl";
@@ -3675,20 +3675,20 @@ export function NewChatLandingScreen() {
       <div className="flex w-full max-w-[840px] flex-col items-center gap-8 px-4 pt-8 pb-16 md:select-none md:px-10">
         <div className="flex w-full flex-col items-center justify-center gap-3.5 font-sans">
           {selectedProject ? (
-            // Landing inside a project: swap Otto's eyes for the same folder
+            // Landing inside a project: swap the skull for the same folder
             // icon the sidebar uses for a project, and name the project. Sized
-            // to Otto's h-16 box so the centered composer doesn't shift when
-            // toggling between the two landings.
+            // to the skull's h-16 box so the centered composer doesn't shift
+            // when toggling between the two landings.
             <span className="flex h-16 shrink-0 items-center">
               <div className="w-14 h-14 flex rounded-xl bg-tag-pink items-center justify-center">
                 <FolderIcon className="size-6 text-brand-accent" />
               </div>
             </span>
           ) : (
-            <OttoEyes className="h-16 w-auto shrink-0" />
+            <SkullSpinner className="h-16 w-auto shrink-0" />
           )}
           <h1 className="min-w-0 break-words text-center text-[28px] leading-8 font-normal tracking-[-0.03em] text-foreground line-clamp-2 sm:text-left">
-            {selectedProject || "What should we build?"}
+            {selectedProject || "What should we do?"}
           </h1>
         </div>
         <div className="relative flex w-full flex-col gap-1">

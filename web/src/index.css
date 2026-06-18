@@ -262,12 +262,12 @@
   /* Stronger divider/outline + a dedicated neutral button border. */
   --border-strong: #a1a1aa;
   --button-border: #d6d6d6;
-  --button-icon-hover-color: #27272a;
-  --input: #e4e4e7;
-  /* Focus ring matches --primary. */
-  --ring: #11171c;
-  /* Brand pink — reserved for brand moments, not status. */
-  --brand-accent: #df3c85;
+  --button-icon-hover-color: #11171c;
+  --input: #e8ecf0;
+  /* Deadwax gold focus ring. */
+  --ring: #edb978;
+  /* Deadwax brand gold — reserved for brand moments, not status. */
+  --brand-accent: #edb978;
   /* Pink tag surface — a translucent wash, so it tints whatever it sits on. */
   --tag-pink: rgba(240, 1, 150, 0.06);
   /* Named status hues. success/warning/info above mirror green/yellow/blue. */
@@ -276,7 +276,7 @@
   --status-yellow: #d4972a;
   --status-red: #f04858;
   --status-gray: #8e99a4;
-  --chart-1: #3b8ff5;
+  --chart-1: #5b9bd5;
   --chart-2: #2272b4;
   --chart-3: #2ea65c;
   --chart-4: #d4972a;
@@ -337,7 +337,7 @@
   --muted-foreground: #92a4b3;
   --code-bg: oklch(0.38 0.005 240);
   --accent: #04355d;
-  --accent-foreground: #edb978;
+  --accent-foreground: #5b9bd5;
   --destructive: #e65b77;
   --destructive-foreground: #fff;
   /* success/warning/info repointed onto the status hues below, mirroring
@@ -363,9 +363,9 @@
   --status-gray: #8e99a4;
   --border: oklch(0.28 0.005 240);
   --input: oklch(0.28 0.005 240);
-  /* Focus ring matches --primary. */
-  --ring: #e8ecf0;
-  --chart-1: oklch(0.64 0.22 254);
+  /* Deadwax gold focus ring. */
+  --ring: #edb978;
+  --chart-1: #5b9bd5;
   --chart-2: oklch(0.65 0.14 200);
   --chart-3: oklch(0.68 0.15 145);
   --chart-4: oklch(0.75 0.16 70);
@@ -374,12 +374,12 @@
      * and the canvas read through it. */
   --sidebar: rgba(17, 23, 28, 0.75);
   --sidebar-foreground: oklch(0.965 0.003 240);
-  --sidebar-primary: oklch(0.64 0.22 254);
-  --sidebar-primary-foreground: oklch(0.12 0.004 240);
+  --sidebar-primary: #edb978;
+  --sidebar-primary-foreground: #11171c;
   --sidebar-accent: oklch(0.245 0.005 240);
   --sidebar-accent-foreground: oklch(0.965 0.003 240);
   --sidebar-border: oklch(0.28 0.005 240);
-  --sidebar-ring: oklch(0.92 0.003 240 / 0.4);
+  --sidebar-ring: #edb978;
   --tooltip-bg: #2a2440;
 }
 
@@ -2244,6 +2244,24 @@ html:not(.dark) .conversations-sidebar {
 @media (prefers-reduced-motion: reduce) {
   .turn-fold-row-enter {
     grid-template-rows: 1fr;
+    animation: none;
+  }
+}
+
+/* Deadwax skull mascot — gentle record-like spin (vinyl turning). */
+@keyframes deadwax-skull-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.deadwax-skull-spin {
+  animation: deadwax-skull-spin 9s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deadwax-skull-spin {
     animation: none;
   }
 }
