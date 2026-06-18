@@ -1,7 +1,14 @@
 # UI diff snapshot tests
 
-A single visual-regression baseline of the empty landing state (`/`,
-`NewChatLandingScreen` — "What should we do?"), gated in CI.
+A single visual-regression baseline of the default empty view (`/`) — the open
+left sidebar plus the `NewChatLandingScreen` ("What should we do?") hero and
+composer, captured full-viewport at 1280×800 — gated in CI.
+
+The landing's data calls (agent catalog, host list, session list, filesystem)
+are stubbed via `page.route` with fixed fixtures, so the rendered view is a pure
+function of the committed bundle and needs no element masking. `live_server`
+still serves the SPA bundle; only `/v1/info` / `/v1/me` reach the real (and
+deterministic) server.
 
 - Test: [`test_landing_snapshot.py`](test_landing_snapshot.py)
 - Baseline (committed): `snapshots/test_landing_snapshot/test_empty_landing_matches_baseline/test_empty_landing_matches_baseline[chromium][linux].png`
@@ -22,8 +29,8 @@ it.
 
 ## How the gate behaves
 
-- On every PR, `ui-snapshot.yml` renders `/` and compares it to the committed
-  baseline. Any pixel difference fails the check and uploads
+- On every PR, `ui-snapshot.yml` renders the default `/` view and compares it to
+  the committed baseline. Any pixel difference fails the check and uploads
   `actual_/expected_/diff_` PNGs as the `ui-snapshot-diff-*` artifact.
 - The baseline is **never** changed automatically. The only way to change it is
   the explicit update flow below.
