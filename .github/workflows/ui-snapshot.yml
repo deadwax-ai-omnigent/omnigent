@@ -100,6 +100,7 @@ jobs:
           npm run build
 
       - name: Compare (PR) or regenerate (dispatch) the landing snapshot
+        id: snapshot
         # --ui-skip-build: the SPA was built in the previous step. On
         # workflow_dispatch we pass --update-snapshots, which rewrites the
         # baseline and intentionally fails the run so a human reviews the image.
@@ -121,14 +122,21 @@ jobs:
             "${EXTRA_ARGS[@]}"
 
       - name: Upload regenerated baseline (dispatch runs)
-        # always(): --update-snapshots exits non-zero by design, but we still
-        # want the regenerated PNG so the dev can download and commit it.
-        if: ${{ always() && github.event_name == 'workflow_dispatch' }}
+        # --update-snapshots exits non-zero by design, but we still want the
+        # regenerated PNG so the dev can download and commit it. Gate on the
+        # snapshot step's own conclusion (success or failure) rather than
+        # always(): if an earlier setup step crashed, the snapshot step is
+        # skipped and we must NOT upload a stale/previous-run PNG as the new
+        # "regenerated" baseline. if-no-files-found: error fails loudly if the
+        # update somehow wrote nothing.
+        if: >-
+          ${{ github.event_name == 'workflow_dispatch'
+            && (steps.snapshot.conclusion == 'success' || steps.snapshot.conclusion == 'failure') }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: ui-snapshot-baseline
           path: tests/e2e_ui/visual/snapshots/**
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7
 
       - name: Upload diff + generated baseline on failure (PR runs)

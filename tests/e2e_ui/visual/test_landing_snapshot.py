@@ -65,8 +65,18 @@ def test_empty_landing_matches_baseline(
     # Generous timeout: the SPA runs a short boot probe before the landing paints.
     expect(landing).to_be_visible(timeout=30_000)
 
-    # Settle web fonts so glyph metrics don't shift mid-capture.
-    page.evaluate("() => document.fonts.ready.then(() => true)")
+    # The composer toolbar's agent control is async: until the agent catalog
+    # fetch resolves, the picker renders a "No agents" placeholder (no
+    # agent-select element) and the Advanced chip is hidden, so a capture taken
+    # before the fetch lands differs structurally from one taken after. Wait for
+    # the loaded state (agent picker present) so the toolbar is deterministic --
+    # this is also what makes the agent-select mask below resolve to an element.
+    expect(page.get_by_test_id("new-chat-landing-agent-select")).to_be_visible(timeout=30_000)
+
+    # Settle web fonts so glyph metrics don't shift mid-capture. The expression
+    # must *return* the Promise so Playwright's sync API awaits it; an arrow
+    # function that calls .then() returns undefined and never waits.
+    page.evaluate("document.fonts.ready")
 
     # Pin the focused-composer border state and kill the blinking caret, both of
     # which are otherwise time-dependent.
