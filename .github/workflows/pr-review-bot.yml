@@ -1,0 +1,137 @@
+# A maintainer comments `/review` on a PR to prove CI can post a PR review
+# as the omnigent-ci[bot] GitHub App identity. This is plumbing-first: the
+# review body is templated, and real review-content generation is a follow-up.
+#
+# Authorization: only .github/MAINTAINER entries (read from main's tip) may run
+# it. Same-repo PRs only for now; fork PRs are rejected before any App token is
+# minted.
+#
+# Identity: the review is posted with an omnigent-ci[bot] GitHub App token
+# minted from OMNIGENT_BOT_APP_ID / OMNIGENT_BOT_APP_KEY. There is deliberately
+# NO GITHUB_TOKEN fallback, because App attribution is the purpose of this
+# plumbing check.
+name: Post PR review as omnigent-ci[bot] on /review comment
+
+on:
+  issue_comment:
+    types: [created]
+
+# Read-only at the top level; write scopes live on the jobs below.
+permissions:
+  contents: read
+
+jobs:
+  # Gate: confirm a `/review` comment on a PR in the OSS repo by a maintainer.
+  # Exposes the PR head ref to the review job and keeps fork PRs out for now.
+  authorize:
+    permissions:
+      contents: read       # checkout main for load-maintainers.sh
+      pull-requests: write # read the PR head ref, post the fork-rejection comment
+      issues: write        # react to the triggering comment
+    if: >-
+      github.repository == 'omnigent-ai/omnigent'
+      && github.event.issue.pull_request
+      && startsWith(github.event.comment.body, '/review')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ok: ${{ steps.authz.outputs.ok }}
+      head: ${{ steps.pr.outputs.head }}
+      cross: ${{ steps.pr.outputs.cross }}
+    steps:
+      # Checkout main only for load-maintainers.sh; no PR code is checked out.
+      - name: Checkout (for the maintainer script)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Load maintainers from .github/MAINTAINER
+        id: maint
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: .github/scripts/merge-ready/load-maintainers.sh
+
+      - name: Authorize commenter
+        id: authz
+        env:
+          LIST: ${{ steps.maint.outputs.list }}
+          ACTOR: ${{ github.event.comment.user.login }}
+        run: |
+          ok=false
+          for u in $LIST; do
+            if [ "$u" = "$ACTOR" ]; then ok=true; break; fi
+          done
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          if [ "$ok" != "true" ]; then
+            echo "::notice::@$ACTOR is not in .github/MAINTAINER; ignoring /review."
+          fi
+
+      - name: Resolve PR head ref
+        id: pr
+        if: steps.authz.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          data=$(gh pr view "${{ github.event.issue.number }}" \
+            --repo "${{ github.repository }}" \
+            --json headRefName,isCrossRepository)
+          echo "head=$(echo "$data" | jq -r .headRefName)" >> "$GITHUB_OUTPUT"
+          echo "cross=$(echo "$data" | jq -r .isCrossRepository)" >> "$GITHUB_OUTPUT"
+
+      # ${{ }} values pass via env: and referenced as "$VAR" to avoid injection.
+      - name: Acknowledge (or reject forks)
+        if: steps.authz.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CROSS: ${{ steps.pr.outputs.cross }}
+          ISSUE: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: |
+          if [ "$CROSS" = "true" ]; then
+            gh pr comment "$ISSUE" --repo "$REPO" \
+              --body "⚠️ \`/review\` supports same-repo PRs only (it can't post an App-authored review to a fork PR from this repo's installation yet)."
+          else
+            gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" \
+              -f content=eyes --silent || true
+          fi
+
+  post-review:
+    permissions:
+      contents: read
+      pull-requests: write # create the PR review
+      issues: write        # keep parity with comment-trigger workflows
+    needs: authorize
+    if: needs.authorize.outputs.ok == 'true' && needs.authorize.outputs.cross == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: pr-review-bot-comment-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    steps:
+      # Mint only the App token used for posting. If the App is not configured,
+      # skip gracefully instead of falling back to GITHUB_TOKEN attribution.
+      - name: Mint App token
+        id: app-token
+        if: vars.OMNIGENT_BOT_APP_ID != ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.OMNIGENT_BOT_APP_ID }}
+          private-key: ${{ secrets.OMNIGENT_BOT_APP_KEY }}
+
+      - name: Skip when App is not configured
+        if: vars.OMNIGENT_BOT_APP_ID == ''
+        run: |
+          echo "::notice::OMNIGENT_BOT_APP_ID is not configured; skipping /review because this workflow must post as omnigent-ci[bot] and has no GITHUB_TOKEN fallback."
+
+      # ${{ }} values pass via env: and referenced as "$VAR" to avoid injection.
+      - name: Post templated PR review
+        if: steps.app-token.outputs.token != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          body="🤖 Automated review posted by omnigent-ci[bot].\n\nThis is a plumbing-first check proving CI can create a PR review through the omnigent-ci GitHub App identity. Real review content generation is a deliberate follow-up."
+          gh api -X POST "repos/$REPO/pulls/$PR_NUMBER/reviews" \
+            -f event=COMMENT \
+            -f body="$body"
