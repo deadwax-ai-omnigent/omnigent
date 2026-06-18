@@ -4,7 +4,7 @@ Drives Cursor via :mod:`cursor_sdk` over a local bridge — one persistent
 ``AsyncAgent`` per Omnigent conversation, created on a
 :meth:`cursor_sdk.AsyncClient.launch_bridge` client and reused turn to turn.
 Each ``run_turn`` issues one ``agent.send`` and translates the streamed
-``run.messages()`` (``SDKMessage`` objects) into ExecutorEvents:
+``run.events()`` (``RunStreamEvent`` objects) into ExecutorEvents:
 assistant text → :class:`TextChunk`, thinking → :class:`ReasoningChunk`,
 tool calls → :class:`ToolCallRequest` / :class:`ToolCallComplete`, completing
 on the run's terminal :class:`cursor_sdk.RunResult`.
@@ -41,6 +41,8 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeAlias
+
+from omnigent.llms._usage_observer import notify_from_dict as _notify_usage_from_dict
 
 from .datamodel import OSEnvSpec
 from .executor import (
@@ -98,6 +100,39 @@ def _resolve_model(model: str | None) -> str:
             )
         return _DEFAULT_CURSOR_MODEL
     return model
+
+
+def _first_of(d: dict[str, Any], *keys: str, default: int = 0) -> int:
+    """Return the value of the first key present (and not None) in *d*."""
+    for k in keys:
+        v = d.get(k)
+        if v is not None:
+            return int(v)
+    return default
+
+
+def _normalize_cursor_usage(raw: dict[str, Any], model: str) -> dict[str, Any]:
+    """Map Cursor SDK usage fields to the standard Omnigent usage dict."""
+    in_tok = _first_of(raw, "inputTokens", "input_tokens")
+    out_tok = _first_of(raw, "outputTokens", "output_tokens")
+    total = _first_of(raw, "totalTokens", "total_tokens", default=in_tok + out_tok)
+    usage: dict[str, Any] = {
+        "input_tokens": in_tok,
+        "output_tokens": out_tok,
+        "total_tokens": total,
+        "model": model,
+    }
+    # Carry cache breakdown if the backend reports it.
+    for dst, *sources in (
+        ("cache_read_input_tokens", "cacheReadInputTokens", "cache_read_input_tokens"),
+        ("cache_creation_input_tokens", "cacheCreationInputTokens", "cache_creation_input_tokens"),
+    ):
+        for src in sources:
+            val = raw.get(src)
+            if val is not None:
+                usage[dst] = val
+                break
+    return usage
 
 
 def _tools_fingerprint(tools: list[ToolSpec]) -> str:
@@ -552,29 +587,37 @@ class CursorExecutor(Executor):
         # Streamed deltas of a single response (no tool between) still
         # concatenate seamlessly, so this never splits one sentence.
         separate_next_text = False
+        turn_usage: dict[str, Any] | None = None
         try:
             run = await state.agent.send(prompt)
-            async for message in run.messages():
-                for event in _sdk_message_to_events(message):
-                    if isinstance(event, TextChunk):
-                        if separate_next_text and response_text and event.text:
-                            # Guarantee a blank-line (paragraph) boundary between
-                            # pre- and post-tool narration, regardless of any single
-                            # trailing/leading newline the two blocks already carry
-                            # (a lone space or "\n" must still become a blank line).
-                            trailing = len(response_text) - len(response_text.rstrip("\n"))
-                            leading = len(event.text) - len(event.text.lstrip("\n"))
-                            if trailing + leading < 2:
-                                pad = "\n" * (2 - trailing - leading)
-                                event = TextChunk(text=pad + event.text)
-                        separate_next_text = False
-                        response_text += event.text
-                    elif isinstance(event, ToolCallRequest):
-                        tool_calls += 1
-                        separate_next_text = True
-                    elif isinstance(event, ToolCallComplete):
-                        separate_next_text = True
-                    yield event
+            async for stream_event in run.events():
+                if stream_event.sdk_message is not None:
+                    for event in _sdk_message_to_events(stream_event.sdk_message):
+                        if isinstance(event, TextChunk):
+                            if separate_next_text and response_text and event.text:
+                                # Guarantee a blank-line (paragraph) boundary between
+                                # pre- and post-tool narration, regardless of any single
+                                # trailing/leading newline the two blocks already carry
+                                # (a lone space or "\n" must still become a blank line).
+                                trailing = len(response_text) - len(response_text.rstrip("\n"))
+                                leading = len(event.text) - len(event.text.lstrip("\n"))
+                                if trailing + leading < 2:
+                                    pad = "\n" * (2 - trailing - leading)
+                                    event = TextChunk(text=pad + event.text)
+                            separate_next_text = False
+                            response_text += event.text
+                        elif isinstance(event, ToolCallRequest):
+                            tool_calls += 1
+                            separate_next_text = True
+                        elif isinstance(event, ToolCallComplete):
+                            separate_next_text = True
+                        yield event
+                # Capture usage from TurnEndedUpdate interaction updates.
+                iu = stream_event.interaction_update
+                if iu is not None and getattr(iu, "type", None) == "turn-ended":
+                    raw_usage = getattr(iu, "usage", None)
+                    if isinstance(raw_usage, dict) and raw_usage:
+                        turn_usage = _normalize_cursor_usage(raw_usage, model)
             result = await run.wait()
         except asyncio.CancelledError:
             raise
@@ -611,8 +654,9 @@ class CursorExecutor(Executor):
                 yield ExecutorError(message=f"LLM response denied by policy: {reason}")
                 return
 
-        # The SDK RunResult carries no token counts, so the turn is left unpriced.
-        yield TurnComplete(response=final, usage=None)
+        if turn_usage:
+            _notify_usage_from_dict(model=model, usage=turn_usage)
+        yield TurnComplete(response=final, usage=turn_usage)
 
     async def _close_state(self, state: _CursorSessionState) -> None:
         if state.agent is not None:

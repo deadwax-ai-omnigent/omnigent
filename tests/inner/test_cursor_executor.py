@@ -23,6 +23,7 @@ import pytest
 from omnigent.inner.cursor_executor import (
     CursorExecutor,
     _build_cursor_prompt,
+    _normalize_cursor_usage,
     _resolve_model,
     _sdk_message_to_events,
 )
@@ -75,9 +76,11 @@ def _install_fake_sdk(
         def __init__(self, script: dict[str, Any]) -> None:
             self._script = script
 
-        async def messages(self) -> Any:
+        async def events(self) -> Any:
             for message in self._script.get("messages", []):
-                yield message
+                yield SimpleNamespace(sdk_message=message, interaction_update=None)
+            for iu in self._script.get("interaction_updates", []):
+                yield SimpleNamespace(sdk_message=None, interaction_update=iu)
 
         async def wait(self) -> Any:
             return SimpleNamespace(
@@ -732,3 +735,129 @@ def test_build_cursor_prompt_serializes_single_user_history() -> None:
     prompt = _build_cursor_prompt(messages, is_first_turn=True, system_prompt="SYS")
     assert "Conversation so far:" in prompt
     assert "earlier context" in prompt and "follow up" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Usage / cost tracking
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_cursor_usage_camel_case() -> None:
+    raw = {"inputTokens": 100, "outputTokens": 50, "totalTokens": 150}
+    result = _normalize_cursor_usage(raw, "cursor-fast")
+    assert result == {
+        "input_tokens": 100,
+        "output_tokens": 50,
+        "total_tokens": 150,
+        "model": "cursor-fast",
+    }
+
+
+def test_normalize_cursor_usage_snake_case() -> None:
+    raw = {"input_tokens": 200, "output_tokens": 80}
+    result = _normalize_cursor_usage(raw, "auto")
+    assert result["input_tokens"] == 200
+    assert result["output_tokens"] == 80
+    assert result["total_tokens"] == 280  # computed from in + out
+
+
+def test_normalize_cursor_usage_includes_cache_fields() -> None:
+    raw = {
+        "inputTokens": 500,
+        "outputTokens": 100,
+        "totalTokens": 600,
+        "cacheReadInputTokens": 300,
+        "cacheCreationInputTokens": 50,
+    }
+    result = _normalize_cursor_usage(raw, "auto")
+    assert result["cache_read_input_tokens"] == 300
+    assert result["cache_creation_input_tokens"] == 50
+
+
+async def test_run_turn_captures_usage_from_turn_ended_update(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When a TurnEndedUpdate with usage appears in the event stream, the
+    TurnComplete event carries the normalized usage dict and
+    _notify_usage_from_dict is called."""
+    turn_ended = SimpleNamespace(
+        type="turn-ended",
+        usage={"inputTokens": 1000, "outputTokens": 200, "totalTokens": 1200},
+    )
+    script = {
+        "messages": [_assistant("Hello")],
+        "interaction_updates": [turn_ended],
+        "status": "finished",
+        "result": "Hello",
+    }
+    _install_fake_sdk(monkeypatch, [script])
+
+    notified: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        "omnigent.inner.cursor_executor._notify_usage_from_dict",
+        lambda *, model, usage: notified.append({"model": model, "usage": usage}),
+    )
+
+    executor = CursorExecutor(api_key="crsr_x")
+    try:
+        events = [e async for e in executor.run_turn([_user("hi")], [], "SYS")]
+    finally:
+        await executor.close()
+
+    completes = [e for e in events if isinstance(e, TurnComplete)]
+    assert len(completes) == 1
+    usage = completes[0].usage
+    assert usage is not None
+    assert usage["input_tokens"] == 1000
+    assert usage["output_tokens"] == 200
+    assert usage["total_tokens"] == 1200
+    assert usage["model"] == "auto"
+
+    # _notify_usage_from_dict was called with the same data.
+    assert len(notified) == 1
+    assert notified[0]["model"] == "auto"
+    assert notified[0]["usage"] == usage
+
+
+async def test_run_turn_usage_none_when_no_turn_ended_update(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without a TurnEndedUpdate, usage stays None (backward-compatible)."""
+    script = {
+        "messages": [_assistant("Hi")],
+        "status": "finished",
+        "result": "Hi",
+    }
+    _install_fake_sdk(monkeypatch, [script])
+
+    notified: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        "omnigent.inner.cursor_executor._notify_usage_from_dict",
+        lambda *, model, usage: notified.append({"model": model, "usage": usage}),
+    )
+
+    executor = CursorExecutor(api_key="crsr_x")
+    try:
+        events = [e async for e in executor.run_turn([_user("hi")], [], "SYS")]
+    finally:
+        await executor.close()
+
+    completes = [e for e in events if isinstance(e, TurnComplete)]
+    assert len(completes) == 1
+    assert completes[0].usage is None
+    assert notified == []  # not called when there is no usage
+
+
+def test_normalize_cursor_usage_camel_takes_priority_over_snake() -> None:
+    raw = {"inputTokens": 100, "input_tokens": 999, "outputTokens": 50, "output_tokens": 888}
+    result = _normalize_cursor_usage(raw, "auto")
+    assert result["input_tokens"] == 100
+    assert result["output_tokens"] == 50
+
+
+def test_normalize_cursor_usage_zero_tokens_preserved() -> None:
+    raw = {"inputTokens": 0, "outputTokens": 0, "totalTokens": 0}
+    result = _normalize_cursor_usage(raw, "auto")
+    assert result["input_tokens"] == 0
+    assert result["output_tokens"] == 0
+    assert result["total_tokens"] == 0

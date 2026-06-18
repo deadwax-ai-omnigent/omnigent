@@ -3,7 +3,7 @@ name: Merge Ready
 # Posts the "Merge Ready" commit status on the PR head SHA -- the single
 # required branch-protection check, backed by the REQUIRED list inside
 # this workflow. Triggers: `/merge` comment (write-access commenter only),
-# `pull_request` labeled (acts only with `automerge`),
+# `pull_request_target` labeled (acts only with `automerge`),
 # `workflow_run` on same-repo CI completion, `check_suite` completion on a
 # `fork-e2e/**` branch (the mirrored fork PR e2e -- a delivery that actually
 # fires, unlike the brittle fork-PR `workflow_run` hop it replaces), and
@@ -24,7 +24,9 @@ name: Merge Ready
 on:
   # `labeled` only; `workflow_run` re-evaluates on CI completion (same-repo PRs
   # and the fork-e2e/** mirror push -- see the job `if`).
-  pull_request:
+  # pull_request_target (not pull_request) so this workflow always runs from
+  # main -- a PR cannot modify the gate logic by editing this file.
+  pull_request_target:
     types: [labeled]
   workflow_run:
     workflows: [PR Template, CI, Lint, E2E UI Tests, E2E Tests, Integration Tests]
@@ -71,7 +73,7 @@ jobs:
     # open PR (push to main, etc.) are dropped by the ctx step.
     if: >-
       (
-        github.event_name == 'pull_request' &&
+        github.event_name == 'pull_request_target' &&
         github.event.label.name == 'automerge'
       ) ||
       (
@@ -128,7 +130,7 @@ jobs:
             gh api "repos/$REPO/commits/$1/pulls" \
               --jq 'map(select(.state == "open")) | .[0].number // empty' 2>/dev/null || true
           }
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          if [[ "${{ github.event_name }}" == "pull_request_target" ]]; then
             PR="${{ github.event.pull_request.number }}"
             SHA="${{ github.event.pull_request.head.sha }}"
           elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
@@ -298,7 +300,7 @@ jobs:
       - name: Enable auto-merge on automerge label
         if: >-
           steps.ctx.outputs.skip != 'true' &&
-          github.event_name == 'pull_request' &&
+          github.event_name == 'pull_request_target' &&
           github.event.action == 'labeled' &&
           github.event.label.name == 'automerge'
         env:
@@ -307,7 +309,7 @@ jobs:
           PR: ${{ steps.ctx.outputs.pr }}
         run: bash .github/scripts/merge-ready/enable-automerge-label.sh
 
-      # Not on pull_request-labeled: auto-merge was enabled in an earlier
+      # Not on pull_request_target-labeled: auto-merge was enabled in an earlier
       # step there, so failing here would make the label look broken even
       # though it worked. Safe on workflow_run/check_suite/workflow_dispatch.
       - name: Fail job when gate is red
