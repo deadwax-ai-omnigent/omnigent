@@ -171,12 +171,12 @@
      * a lavender band. */
   --sidebar: #fdfafa;
   --sidebar-foreground: #11171c;
-  --sidebar-primary: #2272b4;
-  --sidebar-primary-foreground: #fff;
+  --sidebar-primary: #EDB978;
+  --sidebar-primary-foreground: #11171c;
   --sidebar-accent: #d7edfe;
   --sidebar-accent-foreground: #04355d;
   --sidebar-border: #e8ecf0;
-  --sidebar-ring: #2272b4;
+  --sidebar-ring: #EDB978;
 }
 
 .dark {
@@ -210,7 +210,7 @@
   --muted-foreground: #92a4b3;
   --code-bg: oklch(0.38 0.005 240);
   --accent: #04355d;
-  --accent-foreground: #4299e0;
+  --accent-foreground: #EDB978;
   --destructive: #e65b77;
   --destructive-foreground: #fff;
   /* success/warning/info repointed onto the status hues below, mirroring
