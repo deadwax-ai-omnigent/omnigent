@@ -253,9 +253,19 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         <Link
           to="/"
           onClick={onNavClick}
-          className="rounded-sm text-[15px] font-semibold tracking-tight text-foreground transition-colors hover:text-foreground/70"
+          className="flex items-center gap-1.5 rounded-sm transition-opacity hover:opacity-80"
         >
-          Omnigent
+          {/* Deadwax skull mark + wordmark — the menu-bar brand graphic. */}
+          <img
+            src="/skull-mark.svg"
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+            className="size-5 shrink-0 select-none"
+          />
+          <span className="text-[15px] font-semibold tracking-tight text-foreground">
+            Deadwax
+          </span>
         </Link>
         <div className="flex items-center gap-1">
           <DeadwaxThemeMenu />

@@ -744,7 +744,7 @@ export function ChatPage() {
       ? (boundAgentBySession?.name ?? boundAgentName ?? subAgentLabel ?? null)
       : null;
   useEffect(() => {
-    const fallback = urlConvId ? UNTITLED_CONVERSATION_LABEL : "Omnigent";
+    const fallback = urlConvId ? UNTITLED_CONVERSATION_LABEL : "Deadwax";
     const base = truncateTitle(activeConv?.title ?? subAgentTabTitle ?? fallback);
     document.title = showsWorking ? `● ${base}` : base;
   }, [activeConv?.title, subAgentTabTitle, showsWorking, urlConvId]);
@@ -2451,38 +2451,51 @@ function AssistantBubble({ bubble }: { bubble: Extract<Bubble, { kind: "assistan
         data-role="assistant"
         className={isWide ? "max-w-full" : "max-w-3xl"}
       >
-        <MessageContent className={isWide ? "w-full" : undefined}>
-          <BlockRenderer items={bubble.items} sessionStatus={sessionStatus} />
-        </MessageContent>
-        {bubble.lifecycle === "cancelled" && (
-          <p
-            className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"
-            data-testid="assistant-interrupted-indicator"
-          >
-            <XIcon className="size-3" aria-hidden="true" />
-            <span>Interrupted</span>
-          </p>
-        )}
-        {markdownText && (
-          <MessageActions className="mt-1 opacity-40 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-            <MessageAction tooltip="Copy" onClick={handleCopy}>
-              {isCopied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
-            </MessageAction>
-            {/* Fork from this response: clone the session with history
-                truncated after this turn. Hidden while the response is
-                still streaming (its items aren't committed yet) and when
-                the session can't be forked (sub-agent / isolated mount). */}
-            {forkDialog?.canFork && bubble.lifecycle !== "streaming" && (
-              <MessageAction
-                tooltip="Fork from here"
-                data-testid="fork-from-response"
-                onClick={() => forkDialog.openForkDialog({ upToResponseId: bubble.responseId })}
+        {/* Deadwax skull marks each assistant turn inline, to the left of the
+            response — the chat-thread counterpart to the landing-page mascot. */}
+        <div className="flex gap-2.5">
+          <img
+            src="/skull-mark.svg"
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+            className="mt-0.5 size-6 shrink-0 select-none"
+          />
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <MessageContent className={isWide ? "w-full" : undefined}>
+              <BlockRenderer items={bubble.items} sessionStatus={sessionStatus} />
+            </MessageContent>
+            {bubble.lifecycle === "cancelled" && (
+              <p
+                className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"
+                data-testid="assistant-interrupted-indicator"
               >
-                <GitForkIcon size={14} />
-              </MessageAction>
+                <XIcon className="size-3" aria-hidden="true" />
+                <span>Interrupted</span>
+              </p>
             )}
-          </MessageActions>
-        )}
+            {markdownText && (
+              <MessageActions className="mt-1 opacity-40 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                <MessageAction tooltip="Copy" onClick={handleCopy}>
+                  {isCopied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+                </MessageAction>
+                {/* Fork from this response: clone the session with history
+                    truncated after this turn. Hidden while the response is
+                    still streaming (its items aren't committed yet) and when
+                    the session can't be forked (sub-agent / isolated mount). */}
+                {forkDialog?.canFork && bubble.lifecycle !== "streaming" && (
+                  <MessageAction
+                    tooltip="Fork from here"
+                    data-testid="fork-from-response"
+                    onClick={() => forkDialog.openForkDialog({ upToResponseId: bubble.responseId })}
+                  >
+                    <GitForkIcon size={14} />
+                  </MessageAction>
+                )}
+              </MessageActions>
+            )}
+          </div>
+        </div>
       </Message>
 
       {bubble.lifecycle === "failed" && (
