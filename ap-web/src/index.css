@@ -1216,3 +1216,20 @@
   --sidebar-border: rgb(var(--color-border-default));
   --sidebar-ring: rgb(var(--color-border-accent));
 }
+
+/* The app-shell is the canvas behind the floating cards — the "middle pane"
+   the chat sits on. Upstream hardcodes a lavender/purple gradient there
+   (.dark .app-shell), which the token map can't reach. Retint it with the
+   active Deadwax palette: a faint accent glow over an app-bg gradient.
+   :root[data-theme] .app-shell (0,3,0) outranks .dark .app-shell (0,2,0). */
+:root[data-theme] .app-shell {
+  background:
+    radial-gradient(ellipse at 20% 50%, rgb(var(--color-accent) / 0.1) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgb(var(--color-accent) / 0.06) 0%, transparent 45%),
+    linear-gradient(
+      145deg,
+      rgb(var(--color-app-bg-secondary)) 0%,
+      rgb(var(--color-app-bg)) 50%,
+      rgb(var(--color-app-bg-secondary)) 100%
+    );
+}
