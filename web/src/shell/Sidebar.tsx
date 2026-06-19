@@ -68,7 +68,6 @@ import {
 } from "@dnd-kit/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate, useParams } from "@/lib/routing";
-import omnigentWordmark from "@/assets/omnigent-wordmark.svg";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -714,14 +713,19 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
             <Link
               to="/"
               onClick={onNavClick}
-              className="rounded-none transition-opacity duration-200 ease-[var(--ease-otto)] hover:opacity-70"
+              className="flex items-center gap-1.5 rounded-sm transition-opacity duration-200 ease-[var(--ease-otto)] hover:opacity-70"
             >
               <img
-                src={omnigentWordmark}
-                alt="Omnigent"
+                src="/skull-mark.svg"
+                alt=""
+                aria-hidden="true"
+                draggable={false}
                 data-testid="sidebar-wordmark"
-                className="h-[15px] w-auto shrink-0 translate-y-px dark:invert"
+                className="size-5 shrink-0 select-none"
               />
+              <span className="text-[15px] font-semibold tracking-tight text-foreground">
+                Deadwax
+              </span>
             </Link>
             <div className="flex items-center gap-1" data-testid="sidebar-header-actions">
               <Tooltip>

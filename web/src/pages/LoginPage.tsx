@@ -143,7 +143,7 @@ export function LoginPage() {
       <div className="w-full max-w-sm space-y-6">
         <div className="space-y-1 text-center">
           <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
-          <p className="text-ui text-muted-foreground">Welcome to Omnigent.</p>
+          <p className="text-ui text-muted-foreground">Welcome to Deadwax.</p>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4">
