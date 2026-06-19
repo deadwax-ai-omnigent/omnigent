@@ -58,7 +58,7 @@ import { CompactionMarker, RoutingDecisionCard } from "@/components/blocks/Statu
 import { SystemMessageView } from "@/components/blocks/SystemMessage";
 import { isSystemUserContent, parseSystemMessage } from "@/lib/systemMessage";
 import { Button } from "@/components/ui/button";
-import { OttoIcon } from "@/components/icons/OttoIcon";
+import { SkullSpinner } from "@/components/SkullSpinner";
 import { cn } from "@/lib/utils";
 import { QueuedMessagesStrip } from "@/pages/QueuedMessagesStrip";
 import { TurnRail, type Turn } from "@/pages/TurnRail";
@@ -1976,7 +1976,7 @@ function WorkingStatusPin({ show, suppress = false }: { show: boolean; suppress?
               !visible && "sr-only",
             )}
           >
-            <OttoIcon className="otto-working h-4 w-auto shrink-0" />
+            <SkullSpinner className="h-4 w-auto shrink-0" />
             <Shimmer className="text-xs font-mono" duration={1.5}>
               {workingIndicatorLabel(bgCount, tick)}
             </Shimmer>
@@ -2455,7 +2455,7 @@ function WorkingIndicator() {
     <Message from="assistant" data-testid="working-indicator" aria-hidden="true">
       <MessageContent>
         <div className="flex items-center gap-1.5 py-0.5">
-          <OttoIcon className="otto-working h-4 w-auto shrink-0" />
+          <SkullSpinner className="h-4 w-auto shrink-0" />
           <Shimmer className="text-xs font-mono" duration={1.5}>
             {label}
           </Shimmer>
