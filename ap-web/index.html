@@ -1,10 +1,20 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark" data-theme="gold-blue">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Deadwax</title>
+    <!-- Apply the saved Deadwax theme before first paint (no flash of default). -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("deadwax_theme_preference_v1");
+          var ok = ["gold-blue", "purple", "record-store", "red-black", "hornet", "billie", "ye"];
+          document.documentElement.dataset.theme = ok.indexOf(t) >= 0 ? t : "gold-blue";
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

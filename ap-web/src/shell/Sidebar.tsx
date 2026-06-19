@@ -67,7 +67,7 @@ import { cn } from "@/lib/utils";
 import { useResizableSidebar } from "@/hooks/useResizableSidebar";
 import { useSessionSwitchHotkey } from "@/hooks/useSessionSwitchHotkey";
 import { absoluteTime, relativeTime } from "@/lib/relativeTime";
-import { ThemeModeMenu } from "@/components/theme/ThemeModeMenu";
+import { DeadwaxThemeMenu } from "@/components/theme/DeadwaxThemeMenu";
 import { AccountMenu } from "./AccountMenu";
 import {
   type ActiveChatOverride,
@@ -258,7 +258,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           Omnigent
         </Link>
         <div className="flex items-center gap-1">
-          <ThemeModeMenu />
+          <DeadwaxThemeMenu />
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
