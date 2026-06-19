@@ -100,7 +100,7 @@ function MenuRowButton({
       <Icon
         className={cn(
           "size-3.5 shrink-0",
-          isBuiltin ? "text-slate-500 dark:text-slate-400" : "text-pink-500 dark:text-pink-400",
+          isBuiltin ? "text-slate-500 dark:text-slate-400" : "text-[var(--brand-accent)]",
         )}
       />
       <span className="truncate">{row.name}</span>
