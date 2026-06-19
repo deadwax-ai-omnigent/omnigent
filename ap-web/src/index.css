@@ -1058,3 +1058,161 @@
 @media (prefers-reduced-motion: reduce) {
   .deadwax-skull-spin { animation: none; }
 }
+
+/* ===========================================================================
+   Deadwax theme system (ported from the Deadwax app's styles.css).
+   Replaces upstream's light/dark toggle. The selected theme lives on
+   <html data-theme="…"> (set early by the inline script in index.html and by
+   DeadwaxThemeMenu); default is "gold-blue" (Blue & Gold).
+
+   Two layers:
+   1. Per-theme PALETTE blocks define the Deadwax brand tokens (--color-*,
+      RGB triplets) for each of the 7 themes.
+   2. A single MAP block (:root[data-theme]) re-points every upstream token
+      (--background, --primary, --sidebar, …) at those palette tokens. Because
+      :root[data-theme] (0,2,0) outranks both :root and .dark (0,1,0), the
+      Deadwax palette wins regardless of next-themes' class — no per-theme
+      duplication of the upstream token names.
+   =========================================================================== */
+
+:root[data-theme="gold-blue"] {
+  --color-app-bg: 17 19 24;
+  --color-app-bg-secondary: 26 29 36;
+  --color-app-surface: 34 38 47;
+  --color-app-surface-hover: 42 47 58;
+  --color-app-card: 29 32 40;
+  --color-text-primary: 236 232 225;
+  --color-text-secondary: 155 163 178;
+  --color-text-inverse: 17 19 24;
+  --color-accent: 237 185 120;
+  --color-border-default: 42 47 58;
+  --color-border-emphasis: 61 67 77;
+  --color-border-accent: 237 185 120;
+}
+
+:root[data-theme="purple"] {
+  --color-app-bg: 14 9 20;
+  --color-app-bg-secondary: 23 12 33;
+  --color-app-surface: 34 17 48;
+  --color-app-surface-hover: 42 21 60;
+  --color-app-card: 26 16 37;
+  --color-text-primary: 243 234 255;
+  --color-text-secondary: 188 169 217;
+  --color-text-inverse: 255 255 255;
+  --color-accent: 139 46 255;
+  --color-border-default: 52 24 77;
+  --color-border-emphasis: 95 66 128;
+  --color-border-accent: 139 46 255;
+}
+
+:root[data-theme="record-store"] {
+  --color-app-bg: 12 13 11;
+  --color-app-bg-secondary: 23 24 21;
+  --color-app-surface: 34 35 30;
+  --color-app-surface-hover: 42 43 37;
+  --color-app-card: 27 27 24;
+  --color-text-primary: 243 239 228;
+  --color-text-secondary: 185 178 163;
+  --color-text-inverse: 12 13 11;
+  --color-accent: 217 164 65;
+  --color-border-default: 48 49 38;
+  --color-border-emphasis: 80 82 71;
+  --color-border-accent: 217 164 65;
+}
+
+:root[data-theme="red-black"] {
+  --color-app-bg: 9 4 5;
+  --color-app-bg-secondary: 22 7 9;
+  --color-app-surface: 35 16 19;
+  --color-app-surface-hover: 48 19 24;
+  --color-app-card: 23 10 12;
+  --color-text-primary: 246 237 238;
+  --color-text-secondary: 199 168 172;
+  --color-text-inverse: 9 4 5;
+  --color-accent: 215 38 56;
+  --color-border-default: 58 13 17;
+  --color-border-emphasis: 87 49 57;
+  --color-border-accent: 215 38 56;
+}
+
+:root[data-theme="hornet"] {
+  --color-app-bg: 0 0 0;
+  --color-app-bg-secondary: 9 9 9;
+  --color-app-surface: 18 18 18;
+  --color-app-surface-hover: 25 25 25;
+  --color-app-card: 13 13 13;
+  --color-text-primary: 214 168 79;
+  --color-text-secondary: 215 25 32;
+  --color-text-inverse: 0 0 0;
+  --color-accent: 215 25 32;
+  --color-border-default: 27 27 27;
+  --color-border-emphasis: 58 57 53;
+  --color-border-accent: 215 25 32;
+}
+
+:root[data-theme="billie"] {
+  --color-app-bg: 7 20 38;
+  --color-app-bg-secondary: 11 29 53;
+  --color-app-surface: 16 42 79;
+  --color-app-surface-hover: 20 52 96;
+  --color-app-card: 11 32 60;
+  --color-text-primary: 234 243 255;
+  --color-text-secondary: 166 190 220;
+  --color-text-inverse: 7 20 38;
+  --color-accent: 166 255 0;
+  --color-border-default: 21 59 112;
+  --color-border-emphasis: 46 77 115;
+  --color-border-accent: 166 255 0;
+}
+
+:root[data-theme="ye"] {
+  --color-app-bg: 0 0 0;
+  --color-app-bg-secondary: 5 5 5;
+  --color-app-surface: 11 11 11;
+  --color-app-surface-hover: 16 16 16;
+  --color-app-card: 7 7 7;
+  --color-text-primary: 106 106 106;
+  --color-text-secondary: 74 74 74;
+  --color-text-inverse: 0 0 0;
+  --color-accent: 90 90 90;
+  --color-border-default: 20 20 20;
+  --color-border-emphasis: 58 58 58;
+  --color-border-accent: 90 90 90;
+}
+
+/* MAP — upstream tokens ← Deadwax palette. Outranks :root and .dark. */
+:root[data-theme] {
+  --background: rgb(var(--color-app-bg));
+  --foreground: rgb(var(--color-text-primary));
+  --card: rgb(var(--color-app-card));
+  --card-solid: rgb(var(--color-app-card));
+  --card-foreground: rgb(var(--color-text-primary));
+  --tray: rgb(var(--color-app-bg-secondary));
+  --popover: rgb(var(--color-app-card));
+  --popover-foreground: rgb(var(--color-text-primary));
+  --tooltip-bg: rgb(var(--color-app-surface));
+  --code-bg: rgb(var(--color-app-surface));
+  --primary: rgb(var(--color-accent));
+  --primary-foreground: rgb(var(--color-text-inverse));
+  --brand-accent: rgb(var(--color-accent));
+  --ring: rgb(var(--color-border-accent));
+  --secondary: rgb(var(--color-app-surface));
+  --secondary-foreground: rgb(var(--color-text-primary));
+  --muted: rgb(var(--color-app-surface));
+  --muted-foreground: rgb(var(--color-text-secondary));
+  --accent: rgb(var(--color-app-surface-hover));
+  --accent-foreground: rgb(var(--color-text-primary));
+  --border: rgb(var(--color-border-default));
+  --border-strong: rgb(var(--color-border-emphasis));
+  --button-border: rgb(var(--color-border-default));
+  --button-icon-hover-color: rgb(var(--color-text-primary));
+  --input: rgb(var(--color-border-default));
+  --sidebar: rgb(var(--color-app-bg-secondary));
+  --sidebar-foreground: rgb(var(--color-text-primary));
+  --sidebar-primary: rgb(var(--color-accent));
+  --sidebar-primary-foreground: rgb(var(--color-text-inverse));
+  --sidebar-accent: rgb(var(--color-app-surface-hover));
+  --sidebar-accent-foreground: rgb(var(--color-text-primary));
+  --sidebar-border: rgb(var(--color-border-default));
+  --sidebar-ring: rgb(var(--color-border-accent));
+}

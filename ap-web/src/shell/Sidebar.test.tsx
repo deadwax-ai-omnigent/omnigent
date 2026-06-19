@@ -24,7 +24,7 @@ vi.mock("@/hooks/useConversations", () => ({
 }));
 // Header / dialog children that pull their own context — stub to keep the
 // test scoped to the conversation list + funnel.
-vi.mock("@/components/theme/ThemeModeMenu", () => ({ ThemeModeMenu: () => null }));
+vi.mock("@/components/theme/DeadwaxThemeMenu", () => ({ DeadwaxThemeMenu: () => null }));
 vi.mock("@/components/PermissionsModal", () => ({ PermissionsModal: () => null }));
 
 import { useConversations } from "@/hooks/useConversations";
