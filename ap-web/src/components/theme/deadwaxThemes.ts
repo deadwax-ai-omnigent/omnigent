@@ -10,6 +10,7 @@ export const DEADWAX_THEME_STORAGE_KEY = "deadwax_theme_preference_v1";
 export const DEADWAX_THEMES = [
   { id: "gold-blue", label: "Blue & Gold" },
   { id: "purple", label: "Gurple Purple" },
+  { id: "jimi", label: "Jimi" },
   { id: "record-store", label: "Record Store" },
   { id: "red-black", label: "Kill 'Em" },
   { id: "hornet", label: "Nikki" },
