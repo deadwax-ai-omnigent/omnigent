@@ -58,7 +58,6 @@ vi.mock("@/hooks/useConversations", () => ({
 }));
 
 vi.mock("@/components/PermissionsModal", () => ({ PermissionsModal: () => null }));
-
 import { type Conversation, useConversations } from "@/hooks/useConversations";
 import { Toaster } from "@/components/ui/toast";
 import { Sidebar } from "./Sidebar";
