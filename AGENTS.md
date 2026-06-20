@@ -69,3 +69,28 @@ instructions:
   not duplicate policy across adapters or add lifecycle metadata to `AgentSpec`.
 - If framework instructions grow beyond a small ordered list, introduce a
   structured `FrameworkInstructions` value at the prompt-composition boundary.
+
+## Deadwax fork
+
+This branch is the branded Deadwax fork of
+[`omnigent-ai/omnigent`](https://github.com/omnigent-ai/omnigent). Keep
+Deadwax-only branding, themes, and deployment changes out of upstream pull
+requests.
+
+- `origin` is `deadwax-ai-omnigent/omnigent`.
+- `upstream` is `omnigent-ai/omnigent`.
+- `main` mirrors the latest stable upstream release tag (currently `v0.6.0`).
+- `deadwax` is a linear stack of fork customizations on that release.
+- Short-lived change branches target `deadwax` and are squash-merged.
+
+PR #1 (`deadwax` into `main`) is a permanently open view of the fork's custom
+diff. Do not merge it.
+
+To update the fork, fetch upstream tags, create dated recovery refs, move
+`main` to the latest stable release, and rebase the Deadwax stack from its old
+release tag onto the new tag. Resolve conflicts by keeping upstream behavior
+and porting the branding into the current UI structure. Publish rewritten
+`deadwax` history only with `--force-with-lease`.
+
+Upstream contributions must branch from `upstream/main`, never `deadwax`.
+Follow upstream's issue and PR process and reference the issue from the PR.
