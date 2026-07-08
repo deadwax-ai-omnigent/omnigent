@@ -19,7 +19,7 @@ If a fresh clone is missing `upstream`:
 
 Tracking PR [**#1**](https://github.com/deadwax-ai-omnigent/omnigent/pull/1) (`deadwax` → `main`) is a permanently-open *living diff* of everything custom. **Do not merge it.**
 
-No CI is wired up for our workflow — review and revert are manual by design. Upstream's own `.github/workflows/*` are left intact for upstream compatibility; don't depend on them running here.
+No CI is wired up for our workflow — review and revert are manual by design. Upstream's own `.github/workflows/*` are left intact for upstream compatibility; don't depend on them running here. To keep our GitHub Actions bill in check, **all fork workflows are disabled except `Fork e2e mirror`** — see [`docs/deadwax-github-actions.md`](docs/deadwax-github-actions.md) for the current state, how to re-enable, and the re-disable sweep to re-run after a major upstream sync.
 
 ## Make a customization (our repo)
 ```bash
