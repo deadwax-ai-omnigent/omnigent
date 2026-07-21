@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   issues: write
+  pull-requests: write
 
 concurrency:
   group: deadwax-upstream-release-check
@@ -31,7 +32,7 @@ jobs:
           set -euo pipefail
 
           git remote add upstream https://github.com/omnigent-ai/omnigent.git
-          git fetch upstream --tags --force
+          git fetch upstream 'refs/tags/v*:refs/tags/v*' --force
 
           latest_tag="$(
             git tag --list 'v*' --sort=-version:refname \
@@ -54,22 +55,25 @@ jobs:
             echo "main already mirrors $latest_tag."
           fi
 
+          if git merge-base --is-ancestor "$latest_sha" refs/remotes/origin/deadwax; then
+            echo "deadwax already contains $latest_tag."
+            exit 0
+          fi
+
+          if [[ "$(gh api "repos/$GITHUB_REPOSITORY" --jq .has_issues)" != "true" ]]; then
+            gh pr comment 1 \
+              --repo "$GITHUB_REPOSITORY" \
+              --body "Upstream released **$latest_tag** ($latest_sha). The clean \`main\` mirror has been refreshed; \`deadwax\` needs its customization stack rebased and verified."
+            echo "::error::deadwax does not yet contain $latest_tag; status posted to PR #1."
+            exit 1
+          fi
+
           open_sync_issues="$(gh issue list \
             --repo "$GITHUB_REPOSITORY" \
             --state open \
             --limit 100 \
             --json number,title \
             --jq '.[] | select(.title | startswith("[upstream-sync]")) | .number')"
-
-          if git merge-base --is-ancestor "$latest_sha" refs/remotes/origin/deadwax; then
-            echo "deadwax already contains $latest_tag."
-            for issue in $open_sync_issues; do
-              gh issue close "$issue" \
-                --repo "$GITHUB_REPOSITORY" \
-                --comment "Deadwax now contains upstream $latest_tag; closing automatically."
-            done
-            exit 0
-          fi
 
           if [[ -n "$open_sync_issues" ]]; then
             first_issue="${open_sync_issues%%$'\n'*}"

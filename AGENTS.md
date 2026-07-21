@@ -104,9 +104,10 @@ requests.
 - Short-lived change branches target `deadwax` and are squash-merged.
 
 The weekly `deadwax-upstream-sync.yml` workflow advances the clean `main`
-mirror to the newest stable release and opens an issue when `deadwax` needs a
-manual rebase. Scheduled workflows run from the repository's default branch,
-which must remain `deadwax` for this fork-only workflow to execute.
+mirror to the newest stable release and alerts on PR #1 when `deadwax` needs a
+manual rebase (or opens an issue if repository issues are enabled). Scheduled
+workflows run from the repository's default branch, which must remain `deadwax`
+for this fork-only workflow to execute.
 
 PR #1 (`deadwax` into `main`) is a permanently open view of the fork's custom
 diff. Do not merge it.
