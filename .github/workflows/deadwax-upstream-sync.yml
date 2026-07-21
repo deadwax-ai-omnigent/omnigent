@@ -61,10 +61,21 @@ jobs:
           fi
 
           if [[ "$(gh api "repos/$GITHUB_REPOSITORY" --jq .has_issues)" != "true" ]]; then
-            gh pr comment 1 \
+            tracking_pr="$(gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --state open \
+              --base main \
+              --head deadwax \
+              --json number \
+              --jq '.[0].number // empty')"
+            if [[ -z "$tracking_pr" ]]; then
+              echo "::error::deadwax does not contain $latest_tag and no tracking PR is open."
+              exit 1
+            fi
+            gh pr comment "$tracking_pr" \
               --repo "$GITHUB_REPOSITORY" \
               --body "Upstream released **$latest_tag** ($latest_sha). The clean \`main\` mirror has been refreshed; \`deadwax\` needs its customization stack rebased and verified."
-            echo "::error::deadwax does not yet contain $latest_tag; status posted to PR #1."
+            echo "::error::deadwax does not yet contain $latest_tag; status posted to PR #$tracking_pr."
             exit 1
           fi
 
