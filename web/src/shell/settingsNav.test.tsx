@@ -1,7 +1,7 @@
 // Tests for the Settings nav model + sidebar body (settingsNav).
 //
 // Covers the mobile-specific behavior: keyboard shortcuts is hidden on mobile
-// (max-md:hidden), and "Back to Omnigent" does NOT close the sidebar overlay
+// (max-md:hidden), and "Back to Deadwax" does NOT close the sidebar overlay
 // on a plain tap (no onNavClick) so mobile lands back on the conversation list
 // instead of the homepage. Section links still close it.
 
@@ -139,16 +139,16 @@ describe("SettingsSidebarBody", () => {
     expect(screen.getByTestId("settings-nav-archived").className).not.toContain("max-md:hidden");
   });
 
-  it("does NOT close the sidebar when 'Back to Omnigent' is tapped", () => {
+  it("does NOT close the sidebar when 'Back to Deadwax' is tapped", () => {
     // No onNavClick on the back link: on mobile the overlay stays open so the
     // sidebar swaps back to the conversation list rather than closing onto the
     // homepage behind it.
     const { onNavClick } = renderBody();
-    fireEvent.click(screen.getByRole("link", { name: /Back to Omnigent/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Back to Deadwax/ }));
     expect(onNavClick).not.toHaveBeenCalled();
   });
 
-  it("'Back to Omnigent' returns to the conversation the user came from", () => {
+  it("'Back to Deadwax' returns to the conversation the user came from", () => {
     // Simulate the real flow: the sidebar (which stays mounted) tracks the
     // pre-settings location, then the user enters /settings. Back must point at
     // the conversation, not the home page.
@@ -173,7 +173,7 @@ describe("SettingsSidebarBody", () => {
       </TooltipProvider>,
     );
     fireEvent.click(screen.getByText("go-settings"));
-    expect(screen.getByRole("link", { name: /Back to Omnigent/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Back to Deadwax/ })).toHaveAttribute(
       "href",
       "/c/conv_123?file=foo.ts",
     );

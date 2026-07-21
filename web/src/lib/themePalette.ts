@@ -4,14 +4,14 @@
 //
 //   1. MODE  — light / dark / system, owned by next-themes (toggles the
 //      `.dark` class on <html>; see components/theme/ThemeProvider.tsx).
-//   2. PALETTE — the color scheme (Omni pink, GitHub, Vercel, …), owned here.
+//   2. PALETTE — the color scheme (Deadwax, GitHub, Dracula, …), owned here.
 //
 // A palette is applied as a `data-theme` attribute on <html>, so it composes
 // with the mode class: `:root:not(.dark)[data-theme="github"]` is GitHub-light
 // and `.dark[data-theme="github"]` is GitHub-dark (see the palette blocks in
-// index.css). The default "omni" palette carries no CSS overrides — it falls
-// through to the base `:root` / `.dark` tokens — so selecting it just restores
-// the brand look. Everything is expressed through the existing CSS custom
+// index.css). The default "omni" id is retained for storage compatibility but
+// now represents Deadwax Blue & Gold. It carries no CSS overrides and falls
+// through to the branded base `:root` / `.dark` tokens. Everything uses CSS custom
 // properties (--background, --primary, --sidebar, …), so a palette re-skins the
 // whole app without any component knowing a theme changed.
 //
@@ -20,10 +20,18 @@
 // (main.tsx) before first paint and on every change (Appearance settings).
 
 const STORAGE_KEY = "omnigent:ui-theme-palette";
+const LEGACY_DEADWAX_STORAGE_KEY = "deadwax_theme_preference_v1";
 
 /** Selectable color palettes. The first entry is the default (brand) look. */
 export const themePalettes = [
   "omni",
+  "purple",
+  "jimi",
+  "record-store",
+  "red-black",
+  "hornet",
+  "billie",
+  "ye",
   "dracula",
   "github",
   "catppuccin",
@@ -37,7 +45,7 @@ export type ThemePalette = (typeof themePalettes)[number];
 export const themeSelections = [...themePalettes, "custom"] as const;
 export type ThemeSelection = (typeof themeSelections)[number];
 
-/** Default palette: the Omni brand tokens already defined in `:root` / `.dark`. */
+/** Default palette: Deadwax Blue & Gold tokens defined in `:root` / `.dark`. */
 export const DEFAULT_PALETTE: ThemePalette = "omni";
 
 /** A few representative colors used to render a palette's preview swatch. */
@@ -72,16 +80,107 @@ export interface PaletteMeta {
 export const PALETTES: readonly PaletteMeta[] = [
   {
     id: "omni",
-    label: "Omnigent",
-    blurb: "The signature pink brand look.",
+    label: "Blue & Gold",
+    blurb: "The signature Deadwax gold on midnight blue.",
     light: {
-      bg: "#fdf7fb",
+      bg: "#fdfafa",
       card: "#ffffff",
-      accent: "#df3c85",
+      accent: "#edb978",
       border: "#e8ecf0",
       text: "#11171c",
     },
-    dark: { bg: "#160e24", card: "#28223a", accent: "#df3c85", border: "#2a2440", text: "#f4f5f7" },
+    dark: { bg: "#111318", card: "#1d2028", accent: "#edb978", border: "#2a2f3a", text: "#ece8e1" },
+  },
+  {
+    id: "purple",
+    label: "Gurple Purple",
+    blurb: "Deep violet with an electric-purple accent.",
+    light: {
+      bg: "#0e0914",
+      card: "#1a1025",
+      accent: "#8b2eff",
+      border: "#34184d",
+      text: "#f3eaff",
+    },
+    dark: { bg: "#0e0914", card: "#1a1025", accent: "#8b2eff", border: "#34184d", text: "#f3eaff" },
+  },
+  {
+    id: "jimi",
+    label: "Jimi",
+    blurb: "Purple haze with a vivid magenta lead.",
+    light: {
+      bg: "#160c1c",
+      card: "#24142d",
+      accent: "#c62cb8",
+      border: "#3a2048",
+      text: "#f6eafc",
+    },
+    dark: { bg: "#160c1c", card: "#24142d", accent: "#c62cb8", border: "#3a2048", text: "#f6eafc" },
+  },
+  {
+    id: "record-store",
+    label: "Record Store",
+    blurb: "Warm black vinyl with a worn-gold accent.",
+    light: {
+      bg: "#0c0d0b",
+      card: "#1b1b18",
+      accent: "#d9a441",
+      border: "#303126",
+      text: "#f3efe4",
+    },
+    dark: { bg: "#0c0d0b", card: "#1b1b18", accent: "#d9a441", border: "#303126", text: "#f3efe4" },
+  },
+  {
+    id: "red-black",
+    label: "Kill 'Em",
+    blurb: "Near-black surfaces cut with signal red.",
+    light: {
+      bg: "#090405",
+      card: "#170a0c",
+      accent: "#d72638",
+      border: "#3a0d11",
+      text: "#f6edee",
+    },
+    dark: { bg: "#090405", card: "#170a0c", accent: "#d72638", border: "#3a0d11", text: "#f6edee" },
+  },
+  {
+    id: "hornet",
+    label: "Nikki",
+    blurb: "Black, red, and gold with hornet energy.",
+    light: {
+      bg: "#000000",
+      card: "#0d0d0d",
+      accent: "#d71920",
+      border: "#1b1b1b",
+      text: "#d6a84f",
+    },
+    dark: { bg: "#000000", card: "#0d0d0d", accent: "#d71920", border: "#1b1b1b", text: "#d6a84f" },
+  },
+  {
+    id: "billie",
+    label: "Billie",
+    blurb: "Midnight navy lit by acid green.",
+    light: {
+      bg: "#071426",
+      card: "#0b203c",
+      accent: "#a6ff00",
+      border: "#153b70",
+      text: "#eaf3ff",
+    },
+    dark: { bg: "#071426", card: "#0b203c", accent: "#a6ff00", border: "#153b70", text: "#eaf3ff" },
+  },
+  {
+    id: "ye",
+    label: "Ye",
+    blurb: "Severe monochrome in near-black graphite.",
+    light: {
+      bg: "#000000",
+      card: "#070707",
+      accent: "#5a5a5a",
+      border: "#141414",
+      text: "#6a6a6a",
+    },
+    dark: { bg: "#000000", card: "#070707", accent: "#5a5a5a", border: "#141414", text: "#6a6a6a" },
   },
   {
     id: "dracula",
@@ -178,7 +277,11 @@ export function readThemePalette(): ThemeSelection {
   if (typeof window === "undefined") return DEFAULT_PALETTE;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_PALETTE;
+    if (!raw) {
+      const legacy = window.localStorage.getItem(LEGACY_DEADWAX_STORAGE_KEY);
+      if (legacy === "gold-blue") return DEFAULT_PALETTE;
+      return isThemeSelection(legacy) ? legacy : DEFAULT_PALETTE;
+    }
     const parsed: unknown = JSON.parse(raw);
     return isThemeSelection(parsed) ? parsed : DEFAULT_PALETTE;
   } catch {

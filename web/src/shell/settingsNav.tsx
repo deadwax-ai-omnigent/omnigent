@@ -226,7 +226,7 @@ export function SettingsSidebarBody({
           (persistent card), so dropping it changes nothing there. */}
           <Link to={settingsReturnPath}>
             <ArrowLeftIcon className="size-4" />
-            Back to Omnigent
+            Back to Deadwax
           </Link>
         </Button>
         <Tooltip>

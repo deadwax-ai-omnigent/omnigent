@@ -2227,7 +2227,7 @@ function ConversationMenuItems({
                 reason when both apply. */}
             <TooltipContent side="left">
               {sharingOff
-                ? "Sharing has been disabled for this Omnigent server."
+                ? "Sharing has been disabled for this Deadwax server."
                 : "Only the session owner can share this session"}
             </TooltipContent>
           </Tooltip>

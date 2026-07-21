@@ -129,11 +129,11 @@ export function UpdateBanner() {
 
         <div className="min-w-0 flex-1">
           {visibleStatus.state === "available" && (
-            <span>Omnigent {visibleStatus.info?.version ?? "update"} is available.</span>
+            <span>Deadwax {visibleStatus.info?.version ?? "update"} is available.</span>
           )}
           {visibleStatus.state === "downloading" && (
             <div className="flex flex-col gap-1">
-              <span>Downloading Omnigent update… {progress}%</span>
+              <span>Downloading Deadwax update… {progress}%</span>
               <Progress
                 value={progress}
                 className="h-1.5 max-w-80"
@@ -142,7 +142,7 @@ export function UpdateBanner() {
             </div>
           )}
           {visibleStatus.state === "downloaded" && (
-            <span>Omnigent {visibleStatus.info?.version ?? "update"} is ready to install.</span>
+            <span>Deadwax {visibleStatus.info?.version ?? "update"} is ready to install.</span>
           )}
           {visibleStatus.state === "error-security" && (
             <span>

@@ -25,9 +25,16 @@ describe("themePalette", () => {
   });
 
   it("round-trips a valid palette", () => {
-    writeThemePalette("github");
-    expect(readThemePalette()).toBe("github");
-    expect(localStorage.getItem(STORAGE_KEY)).toBe(JSON.stringify("github"));
+    writeThemePalette("jimi");
+    expect(readThemePalette()).toBe("jimi");
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(JSON.stringify("jimi"));
+  });
+
+  it("migrates the original Deadwax theme preference", () => {
+    localStorage.setItem("deadwax_theme_preference_v1", "record-store");
+    expect(readThemePalette()).toBe("record-store");
+    localStorage.setItem("deadwax_theme_preference_v1", "gold-blue");
+    expect(readThemePalette()).toBe(DEFAULT_PALETTE);
   });
 
   it("round-trips the custom theme selection", () => {
@@ -59,6 +66,7 @@ describe("themePalette", () => {
   it("guards known vs unknown palette ids", () => {
     expect(isThemePalette("github")).toBe(true);
     expect(isThemePalette("omni")).toBe(true);
+    expect(isThemePalette("jimi")).toBe(true);
     expect(isThemePalette("nord")).toBe(true);
     expect(isThemePalette("nope")).toBe(false);
     expect(isThemePalette(undefined)).toBe(false);

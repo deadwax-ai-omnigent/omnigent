@@ -228,7 +228,7 @@ describe("Sidebar session list", () => {
     // The same card now shows the settings nav (Back to app + sections),
     // not the conversation search/list.
     expect(screen.queryByTestId("sidebar-search-button")).toBeNull();
-    expect(screen.getByRole("link", { name: /Back to Omnigent/ })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: /Back to Deadwax/ })).toHaveAttribute("href", "/");
     expect(screen.getByTestId("settings-nav-appearance")).toHaveAttribute(
       "href",
       "/settings/appearance",
