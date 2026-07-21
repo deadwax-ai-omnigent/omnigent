@@ -30,7 +30,7 @@ filename). Keep every section and checkbox row so reviewers can skim them.
 - **Test Plan** — how you verified it.
 - **Demo** — a **video or images** showing the change. Expected on contributor
   PRs for UI / frontend changes (check the "UI / frontend change" box under
-  *Type of change*) so reviewers can see the new behaviour without checking out
+  _Type of change_) so reviewers can see the new behaviour without checking out
   the branch. Use `N/A` for non-visual changes.
 - **Type of change** / **Test coverage** — check all that apply (at least one
   each).
@@ -62,8 +62,8 @@ Keep comments short and focused on the code, not on the change history.
 - **Keep them brief** — prefer one or two lines. Avoid comments longer than
   three lines; if you need more, the code likely needs refactoring or a doc
   string, not a wall of inline commentary.
-- **Describe the scenario, not the PR** — explain *what* the code handles or
-  *why* it exists, in terms a future reader needs. Don't reference PR numbers,
+- **Describe the scenario, not the PR** — explain _what_ the code handles or
+  _why_ it exists, in terms a future reader needs. Don't reference PR numbers,
   issue numbers, or ticket IDs (e.g. `#1646`, `fixes JIRA-123`); the scenario
   should be clear without chasing external links.
 
@@ -102,6 +102,11 @@ requests.
 - `main` mirrors the latest stable upstream release tag (currently `v0.6.0`).
 - `deadwax` is a linear stack of fork customizations on that release.
 - Short-lived change branches target `deadwax` and are squash-merged.
+
+The weekly `deadwax-upstream-sync.yml` workflow advances the clean `main`
+mirror to the newest stable release and opens an issue when `deadwax` needs a
+manual rebase. Scheduled workflows run from the repository's default branch,
+which must remain `deadwax` for this fork-only workflow to execute.
 
 PR #1 (`deadwax` into `main`) is a permanently open view of the fork's custom
 diff. Do not merge it.

@@ -268,8 +268,8 @@
   --ring: #edb978;
   /* Deadwax brand gold — reserved for brand moments, not status. */
   --brand-accent: #edb978;
-  /* Pink tag surface — a translucent wash, so it tints whatever it sits on. */
-  --tag-pink: rgba(240, 1, 150, 0.06);
+  /* Gold tag surface — a translucent wash, so it tints whatever it sits on. */
+  --tag-pink: rgba(237, 185, 120, 0.14);
   /* Named status hues. success/warning/info above mirror green/yellow/blue. */
   --status-blue: #3b8ff5;
   --status-green: #2ea65c;
@@ -306,37 +306,37 @@
 }
 
 .dark {
-  /* Dark mode tokens — semi-transparent for glassmorphism backdrop-filter */
+  /* Deadwax Blue & Gold dark tokens. */
   --ui-shadow-neutral-rgb: 0 0 0;
   --ui-shadow-warm-rgb: 0 0 0;
   --composer-shadow: 0 0 12px -6px rgb(0 0 0 / 80%);
   --composer-shadow-focus: 0 0 14px -8px rgb(0 0 0 / 90%);
-  --background: #0e1013;
-  --foreground: oklch(0.965 0.003 240);
-  --card: rgba(31, 39, 45, 0.6);
+  --background: #111318;
+  --foreground: #ece8e1;
+  --card: rgba(29, 32, 40, 0.72);
   /* Opaque stand-in for the glass --card. The composer card uses this
      * instead of --card: its trays tuck their square corners behind the
      * card (negative-margin overlap), and a translucent card lets the
      * tucked strip ghost through its edges. Approximates the glass card's
      * perceived color on the dark canvas. */
-  --card-solid: #181f25;
-  --card-foreground: oklch(0.965 0.003 240);
+  --card-solid: #1d2028;
+  --card-foreground: #ece8e1;
   /* Dark counterpart of the tray surface — semi-transparent for glass effect */
-  --tray: rgba(31, 39, 45, 0.6);
-  --popover: rgba(26, 33, 41, 0.8);
-  --popover-foreground: oklch(0.965 0.003 240);
-  --primary: #e8ecf0;
-  --primary-foreground: #11171c;
-  --secondary: #1f272d;
-  --secondary-foreground: #e8ecf0;
+  --tray: rgba(26, 29, 36, 0.78);
+  --popover: rgba(29, 32, 40, 0.94);
+  --popover-foreground: #ece8e1;
+  --primary: #edb978;
+  --primary-foreground: #111318;
+  --secondary: #22262f;
+  --secondary-foreground: #ece8e1;
   /* Active/selected states, hover backgrounds, subtle containers. */
   /* Opaque slate base: bg-muted backs ~160 solid utility surfaces (code
        blocks, badges, hover rows) that must stay opaque; the frosted look is
        reserved for the .dark .bg-card rule. */
-  --muted: color-mix(in srgb, var(--muted-foreground) 15%, #262f36);
-  --muted-foreground: #92a4b3;
-  --code-bg: oklch(0.38 0.005 240);
-  --accent: #04355d;
+  --muted: #22262f;
+  --muted-foreground: #9ba3b2;
+  --code-bg: #22262f;
+  --accent: #2a2f3a;
   --accent-foreground: #5b9bd5;
   --destructive: #e65b77;
   --destructive-foreground: #fff;
@@ -352,17 +352,19 @@
   /* Brand pink + named status hues (same values as light — the brand
      * status palette is hue-stable across themes). Defined explicitly here
      * rather than inheriting from :root so dark mode is self-contained. */
-  --brand-accent: #df3c85;
-  /* Pink tag surface — a heavier wash than light, since 6% all but vanishes
-     * against the dark canvas. */
-  --tag-pink: rgba(240, 1, 150, 0.15);
+  --brand-accent: #edb978;
+  /* Gold tag surface — a heavier wash than light, since a light wash all but
+     * vanishes against the dark canvas. */
+  --tag-pink: rgba(237, 185, 120, 0.18);
   --status-blue: #3b8ff5;
   --status-green: #2ea65c;
   --status-yellow: #d4972a;
   --status-red: #f04858;
   --status-gray: #8e99a4;
-  --border: oklch(0.28 0.005 240);
-  --input: oklch(0.28 0.005 240);
+  --border: #2a2f3a;
+  --border-strong: #3d434d;
+  --button-border: #2a2f3a;
+  --input: #2a2f3a;
   /* Deadwax gold focus ring. */
   --ring: #edb978;
   --chart-1: #5b9bd5;
@@ -370,29 +372,31 @@
   --chart-3: oklch(0.68 0.15 145);
   --chart-4: oklch(0.75 0.16 70);
   --chart-5: oklch(0.65 0.008 240);
-  /* Translucent so the sidebar's own layers (see .dark .conversations-sidebar)
-     * and the canvas read through it. */
-  --sidebar: rgba(17, 23, 28, 0.75);
-  --sidebar-foreground: oklch(0.965 0.003 240);
+  /* bg-sidebar surfaces blend into the dark .app-shell gradient — a 145°
+     * sweep through midnight blue; --sidebar stays translucent so it tracks
+     * the canvas underneath (a flat color can't match a gradient
+     * everywhere). Mirrors the light-mode treatment. */
+  --sidebar: rgba(26, 29, 36, 0.82);
+  --sidebar-foreground: #ece8e1;
   --sidebar-primary: #edb978;
   --sidebar-primary-foreground: #11171c;
-  --sidebar-accent: oklch(0.245 0.005 240);
-  --sidebar-accent-foreground: oklch(0.965 0.003 240);
-  --sidebar-border: oklch(0.28 0.005 240);
+  --sidebar-accent: #2a2f3a;
+  --sidebar-accent-foreground: #ece8e1;
+  --sidebar-border: #2a2f3a;
   --sidebar-ring: #edb978;
-  --tooltip-bg: #2a2440;
+  --tooltip-bg: #22262f;
 }
 
-/* Omnigent-only active sidebar treatment. Other palettes retain their neutral
+/* Deadwax-only active sidebar treatment. Other palettes retain their neutral
  * inherited sidebar-active tokens. */
 :root:not(.dark):not([data-theme]) {
-  --sidebar-active: rgba(240, 1, 150, 0.1);
-  --sidebar-active-foreground: #651249;
+  --sidebar-active: rgba(237, 185, 120, 0.18);
+  --sidebar-active-foreground: #5c4520;
 }
 
 .dark:not([data-theme]) {
-  --sidebar-active: rgba(240, 1, 150, 0.15);
-  --sidebar-active-foreground: #f472b6;
+  --sidebar-active: rgba(237, 185, 120, 0.16);
+  --sidebar-active-foreground: #edb978;
 }
 
 /* Main-sidebar item labels use the same text-ui semantic step as Appearance
@@ -432,31 +436,32 @@
   padding: 0;
 }
 
-/* App-shell canvas — the transparent <main> shows it through. Light: flat
- * white. Dark: purple-tinted near-black, two faint radial blooms over a 145°
- * gradient (from the agentic-ux-2026 mock). The rails paint their own layers
- * (below) and are excluded from the .dark glass rule, so they read as canvas,
- * not frosted cards. */
+/* App-shell canvas — the transparent <main> shows it through. Deadwax paints a
+ * warm gold drift in light mode and midnight blue in dark. The rails paint
+ * their own layers (below) and are excluded from the .dark glass rule, so they
+ * read as canvas, not frosted cards. */
 .app-shell {
-  background: var(--background);
+  background:
+    radial-gradient(ellipse at 20% 50%, rgb(237 185 120 / 8%) 0%, transparent 50%),
+    linear-gradient(145deg, #fffdfa 0%, #fdfafa 52%, #f8f4ee 100%);
 }
 .dark .app-shell {
   background:
-    radial-gradient(rgba(100, 40, 180, 0.12), transparent 50%),
-    radial-gradient(at 80% 20%, rgba(80, 30, 140, 0.08), transparent 45%),
-    linear-gradient(145deg, #1a0e2d, #0e1418, #130e1b);
+    radial-gradient(ellipse at 20% 50%, rgb(237 185 120 / 10%) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgb(91 155 213 / 7%) 0%, transparent 45%),
+    linear-gradient(145deg, #1a1d24 0%, #111318 50%, #1a1d24 100%);
 }
 
-/* Omnigent's sidebar canvas. The default palette carries no data-theme
+/* Deadwax's sidebar canvas. The default palette carries no data-theme
  * attribute, so these brand gradients cannot leak into alternate palettes. */
 :root:not(.dark):not([data-theme]) .conversations-sidebar {
   background: #fffefe;
-  background: -webkit-linear-gradient(to right, #fffefe, #fcf6fa);
-  background: linear-gradient(to right, #fffefe, #fcf6fa);
+  background: -webkit-linear-gradient(to right, #fffefe, #fdfaf4);
+  background: linear-gradient(to right, #fffefe, #fdfaf4);
 }
 .dark:not([data-theme]) .conversations-sidebar {
   background:
-    linear-gradient(transparent 35%, rgba(92, 48, 108, 0.2)),
+    linear-gradient(transparent 35%, rgba(237, 185, 120, 0.08)),
     linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 60%);
 }
 
@@ -2276,4 +2281,170 @@ html:not(.dark) .conversations-sidebar {
   .deadwax-skull-spin {
     animation: none;
   }
+}
+
+/* Deadwax palettes. Blue & Gold is the base theme above; these presets map
+ * the original Deadwax palette tokens onto v0.6's semantic theme variables. */
+:root[data-theme="purple"] {
+  --deadwax-bg: 14 9 20;
+  --deadwax-bg-secondary: 23 12 33;
+  --deadwax-surface: 34 17 48;
+  --deadwax-surface-hover: 42 21 60;
+  --deadwax-card: 26 16 37;
+  --deadwax-text: 243 234 255;
+  --deadwax-text-muted: 188 169 217;
+  --deadwax-text-inverse: 255 255 255;
+  --deadwax-accent: 139 46 255;
+  --deadwax-border: 52 24 77;
+  --deadwax-border-strong: 95 66 128;
+}
+
+:root[data-theme="jimi"] {
+  --deadwax-bg: 22 12 28;
+  --deadwax-bg-secondary: 32 18 40;
+  --deadwax-surface: 47 26 58;
+  --deadwax-surface-hover: 58 32 72;
+  --deadwax-card: 36 20 45;
+  --deadwax-text: 246 234 252;
+  --deadwax-text-muted: 196 170 211;
+  --deadwax-text-inverse: 255 255 255;
+  --deadwax-accent: 198 44 184;
+  --deadwax-border: 58 32 72;
+  --deadwax-border-strong: 100 62 122;
+}
+
+:root[data-theme="record-store"] {
+  --deadwax-bg: 12 13 11;
+  --deadwax-bg-secondary: 23 24 21;
+  --deadwax-surface: 34 35 30;
+  --deadwax-surface-hover: 42 43 37;
+  --deadwax-card: 27 27 24;
+  --deadwax-text: 243 239 228;
+  --deadwax-text-muted: 185 178 163;
+  --deadwax-text-inverse: 12 13 11;
+  --deadwax-accent: 217 164 65;
+  --deadwax-border: 48 49 38;
+  --deadwax-border-strong: 80 82 71;
+}
+
+:root[data-theme="red-black"] {
+  --deadwax-bg: 9 4 5;
+  --deadwax-bg-secondary: 22 7 9;
+  --deadwax-surface: 35 16 19;
+  --deadwax-surface-hover: 48 19 24;
+  --deadwax-card: 23 10 12;
+  --deadwax-text: 246 237 238;
+  --deadwax-text-muted: 199 168 172;
+  --deadwax-text-inverse: 9 4 5;
+  --deadwax-accent: 215 38 56;
+  --deadwax-border: 58 13 17;
+  --deadwax-border-strong: 87 49 57;
+}
+
+:root[data-theme="hornet"] {
+  --deadwax-bg: 0 0 0;
+  --deadwax-bg-secondary: 9 9 9;
+  --deadwax-surface: 18 18 18;
+  --deadwax-surface-hover: 25 25 25;
+  --deadwax-card: 13 13 13;
+  --deadwax-text: 214 168 79;
+  --deadwax-text-muted: 215 25 32;
+  --deadwax-text-inverse: 0 0 0;
+  --deadwax-accent: 215 25 32;
+  --deadwax-border: 27 27 27;
+  --deadwax-border-strong: 58 57 53;
+}
+
+:root[data-theme="billie"] {
+  --deadwax-bg: 7 20 38;
+  --deadwax-bg-secondary: 11 29 53;
+  --deadwax-surface: 16 42 79;
+  --deadwax-surface-hover: 20 52 96;
+  --deadwax-card: 11 32 60;
+  --deadwax-text: 234 243 255;
+  --deadwax-text-muted: 166 190 220;
+  --deadwax-text-inverse: 7 20 38;
+  --deadwax-accent: 166 255 0;
+  --deadwax-border: 21 59 112;
+  --deadwax-border-strong: 46 77 115;
+}
+
+:root[data-theme="ye"] {
+  --deadwax-bg: 0 0 0;
+  --deadwax-bg-secondary: 5 5 5;
+  --deadwax-surface: 11 11 11;
+  --deadwax-surface-hover: 16 16 16;
+  --deadwax-card: 7 7 7;
+  --deadwax-text: 106 106 106;
+  --deadwax-text-muted: 74 74 74;
+  --deadwax-text-inverse: 0 0 0;
+  --deadwax-accent: 90 90 90;
+  --deadwax-border: 20 20 20;
+  --deadwax-border-strong: 58 58 58;
+}
+
+:root:is(
+  [data-theme="purple"],
+  [data-theme="jimi"],
+  [data-theme="record-store"],
+  [data-theme="red-black"],
+  [data-theme="hornet"],
+  [data-theme="billie"],
+  [data-theme="ye"]
+) {
+  --background: rgb(var(--deadwax-bg));
+  --foreground: rgb(var(--deadwax-text));
+  --card: rgb(var(--deadwax-card));
+  --card-solid: rgb(var(--deadwax-card));
+  --card-foreground: rgb(var(--deadwax-text));
+  --tray: rgb(var(--deadwax-bg-secondary));
+  --popover: rgb(var(--deadwax-card));
+  --popover-foreground: rgb(var(--deadwax-text));
+  --tooltip-bg: rgb(var(--deadwax-surface));
+  --code-bg: rgb(var(--deadwax-surface));
+  --primary: rgb(var(--deadwax-accent));
+  --primary-foreground: rgb(var(--deadwax-text-inverse));
+  --brand-accent: rgb(var(--deadwax-accent));
+  --ring: rgb(var(--deadwax-accent));
+  --secondary: rgb(var(--deadwax-surface));
+  --secondary-foreground: rgb(var(--deadwax-text));
+  --muted: rgb(var(--deadwax-surface));
+  --muted-foreground: rgb(var(--deadwax-text-muted));
+  --accent: rgb(var(--deadwax-surface-hover));
+  --accent-foreground: rgb(var(--deadwax-text));
+  --border: rgb(var(--deadwax-border));
+  --border-strong: rgb(var(--deadwax-border-strong));
+  --button-border: rgb(var(--deadwax-border));
+  --button-icon-hover-color: rgb(var(--deadwax-text));
+  --input: rgb(var(--deadwax-border));
+  --chart-1: rgb(var(--deadwax-accent));
+  --sidebar: rgb(var(--deadwax-bg-secondary));
+  --sidebar-foreground: rgb(var(--deadwax-text));
+  --sidebar-primary: rgb(var(--deadwax-accent));
+  --sidebar-primary-foreground: rgb(var(--deadwax-text-inverse));
+  --sidebar-accent: rgb(var(--deadwax-surface-hover));
+  --sidebar-accent-foreground: rgb(var(--deadwax-text));
+  --sidebar-border: rgb(var(--deadwax-border));
+  --sidebar-ring: rgb(var(--deadwax-accent));
+}
+
+:root:is(
+    [data-theme="purple"],
+    [data-theme="jimi"],
+    [data-theme="record-store"],
+    [data-theme="red-black"],
+    [data-theme="hornet"],
+    [data-theme="billie"],
+    [data-theme="ye"]
+  )
+  .app-shell {
+  background:
+    radial-gradient(ellipse at 20% 50%, rgb(var(--deadwax-accent) / 10%) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgb(var(--deadwax-accent) / 6%) 0%, transparent 45%),
+    linear-gradient(
+      145deg,
+      rgb(var(--deadwax-bg-secondary)) 0%,
+      rgb(var(--deadwax-bg)) 50%,
+      rgb(var(--deadwax-bg-secondary)) 100%
+    );
 }

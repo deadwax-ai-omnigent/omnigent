@@ -1,18 +1,18 @@
 #!/bin/bash
-# Deadwax deploy: build the rebranded ap-web bundle and serve it from the active
+# Deadwax deploy: build the rebranded web bundle and serve it from the active
 # omnigent install on this Mac, then restart the phone-access watchdog.
 #
 # Our Deadwax customizations are frontend-only (the static web-ui bundle), so we
 # build it here and copy it over whatever omnigent the runtime uses — functionally
 # identical to running the fork, with none of the dependency-reinstall risk. Run
-# this after each weekly upstream sync (or any ap-web change).
+# this after each upstream sync (or any web UI change).
 set -euo pipefail
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:$PATH"
 
 FORK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-echo "==> Building rebranded ap-web ($FORK_DIR/ap-web)"
-cd "$FORK_DIR/ap-web"
-[ -d node_modules ] || npm install --no-audit --no-fund
+echo "==> Building rebranded web UI ($FORK_DIR/web)"
+cd "$FORK_DIR/web"
+[ -d node_modules ] || npm ci --legacy-peer-deps --no-audit --no-fund
 npm run build   # vite outputs to ../omnigent/server/static/web-ui
 
 FORK_UI="$FORK_DIR/omnigent/server/static/web-ui"
@@ -24,6 +24,10 @@ if [ -z "$PKG_UI" ]; then
   PKG_UI="$(uv tool run --from omnigent python -c 'import omnigent,os;print(os.path.join(os.path.dirname(omnigent.__file__),"server","static","web-ui"))' 2>/dev/null)"
 fi
 [ -n "$PKG_UI" ] || { echo "ERROR: could not locate the active omnigent web-ui dir" >&2; exit 1; }
+case "$PKG_UI" in
+  */site-packages/omnigent/server/static/web-ui) ;;
+  *) echo "ERROR: refusing unexpected web-ui target: $PKG_UI" >&2; exit 1 ;;
+esac
 echo "==> Serving branded UI from active install: $PKG_UI"
 [ -d "$PKG_UI.upstream-bak" ] || cp -R "$PKG_UI" "$PKG_UI.upstream-bak"
 rm -rf "$PKG_UI"

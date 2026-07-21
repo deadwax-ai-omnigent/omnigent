@@ -152,13 +152,13 @@ export function UpdateBanner({ variant = "floating" }: { variant?: "floating" | 
         <div className="min-w-0 flex-1">
           {visibleStatus.state === "available" && (
             <p className="font-medium text-foreground">
-              Omnigent {visibleStatus.info?.version ?? "update"} is available
+              Deadwax {visibleStatus.info?.version ?? "update"} is available
             </p>
           )}
           {visibleStatus.state === "downloading" && (
             <>
               <p className="font-medium text-foreground">
-                Downloading Omnigent update… {progress}%
+                Downloading Deadwax update… {progress}%
               </p>
               <Progress
                 value={progress}
@@ -170,7 +170,7 @@ export function UpdateBanner({ variant = "floating" }: { variant?: "floating" | 
           {visibleStatus.state === "downloaded" && (
             <>
               <p className="font-medium text-foreground">
-                Omnigent {visibleStatus.info?.version ?? "update"} is ready to install
+                Deadwax {visibleStatus.info?.version ?? "update"} is ready to install
               </p>
               {autoInstall && (
                 <p className="mt-0.5 text-sm text-muted-foreground">

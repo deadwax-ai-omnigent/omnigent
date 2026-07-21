@@ -59,7 +59,7 @@ describe("UpdateBanner", () => {
     });
     render(<UpdateBanner />);
 
-    expect(await screen.findByText("Omnigent 0.4.0 is available")).toBeInTheDocument();
+    expect(await screen.findByText("Deadwax 0.4.0 is available")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Update now" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Skip this version" })).toBeInTheDocument();
     expect(screen.getByText("Release notes")).toBeInTheDocument();
@@ -68,12 +68,12 @@ describe("UpdateBanner", () => {
     );
 
     emit({ state: "downloading", progress: { percent: 42 } });
-    expect(await screen.findByText("Downloading Omnigent update… 42%")).toBeInTheDocument();
+    expect(await screen.findByText("Downloading Deadwax update… 42%")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Update now" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Skip this version" })).toBeNull();
 
     emit({ state: "downloaded", info: { version: "0.4.0" } });
-    expect(await screen.findByText("Omnigent 0.4.0 is ready to install")).toBeInTheDocument();
+    expect(await screen.findByText("Deadwax 0.4.0 is ready to install")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Restart to update" })).toBeInTheDocument();
     expect(screen.getByText("Installs automatically on next quit.")).toBeInTheDocument();
   });
@@ -89,7 +89,7 @@ describe("UpdateBanner", () => {
 
     render(<UpdateBanner />);
 
-    expect(await screen.findByText("Omnigent 0.4.0 is ready to install")).toBeInTheDocument();
+    expect(await screen.findByText("Deadwax 0.4.0 is ready to install")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Restart to update" })).toBeInTheDocument();
     expect(screen.queryByText("Installs automatically on next quit.")).toBeNull();
   });
@@ -101,7 +101,7 @@ describe("UpdateBanner", () => {
     });
 
     const { unmount } = render(<UpdateBanner />);
-    expect(await screen.findByText("Omnigent 0.4.0 is available")).toBeInTheDocument();
+    expect(await screen.findByText("Deadwax 0.4.0 is available")).toBeInTheDocument();
 
     unmount();
 
@@ -120,12 +120,12 @@ describe("UpdateBanner", () => {
     vi.mocked(bridge.setConfig).mockResolvedValueOnce(skippedConfig);
 
     render(<UpdateBanner />);
-    expect(await screen.findByText("Omnigent 0.4.0 is available")).toBeInTheDocument();
+    expect(await screen.findByText("Deadwax 0.4.0 is available")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Skip this version" }));
     await waitFor(() => {
       expect(bridge.setConfig).toHaveBeenCalledWith({ skippedVersion: "0.4.0" });
-      expect(screen.queryByText("Omnigent 0.4.0 is available")).toBeNull();
+      expect(screen.queryByText("Deadwax 0.4.0 is available")).toBeNull();
     });
   });
 });
