@@ -67,6 +67,7 @@ def detect_base_url(
     *,
     host: str,
     port: int,
+    ssl_enabled: bool = False,
 ) -> str:
     """
     Derive the server's public base URL from the PaaS environment.
@@ -86,6 +87,10 @@ def detect_base_url(
         e.g. ``"0.0.0.0"``.
     :param port: The bind port, used only for the local fallback,
         e.g. ``8000``.
+    :param ssl_enabled: Whether the process terminates TLS itself (e.g.
+        ``SSL_CERTFILE`` set). Only affects the local fallback's scheme —
+        every PaaS branch above already fronts the app with ``https://``
+        regardless of how the app itself is bound.
     :returns: The public base URL, e.g. ``"https://myapp.onrender.com"`` or
         ``"http://0.0.0.0:8000"``.
     """
@@ -101,4 +106,5 @@ def detect_base_url(
     hf_host = environ.get("SPACE_HOST")
     if hf_host:
         return f"https://{hf_host}"
-    return f"http://{host}:{port}"
+    scheme = "https" if ssl_enabled else "http"
+    return f"{scheme}://{host}:{port}"

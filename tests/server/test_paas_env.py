@@ -82,3 +82,27 @@ def test_detect_base_url(environ: dict[str, str], expected: str):
     wrong ``OMNIGENT_ACCOUNTS_BASE_URL`` and break magic-link / cookie flows.
     """
     assert detect_base_url(environ, host="0.0.0.0", port=8000) == expected
+
+
+def test_detect_base_url_ssl_enabled_local_fallback():
+    """ssl_enabled only affects the local fallback scheme, never a PaaS branch.
+
+    A failure here means a native-TLS container would advertise an
+    ``http://`` base URL (breaking secure-cookie defaults) or, worse, an
+    ``https://`` base URL when the operator never configured TLS.
+    """
+    assert (
+        detect_base_url({}, host="0.0.0.0", port=8000, ssl_enabled=True) == "https://0.0.0.0:8000"
+    )
+    assert (
+        detect_base_url({}, host="0.0.0.0", port=8000, ssl_enabled=False) == "http://0.0.0.0:8000"
+    )
+    assert (
+        detect_base_url(
+            {"RENDER_EXTERNAL_URL": "https://svc.onrender.com"},
+            host="0.0.0.0",
+            port=8000,
+            ssl_enabled=False,
+        )
+        == "https://svc.onrender.com"
+    )

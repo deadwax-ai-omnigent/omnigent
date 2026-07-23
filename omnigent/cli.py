@@ -3155,6 +3155,27 @@ def _assert_server_port_bindable(host: str, port: int) -> None:
     help="Port to listen on.",
 )
 @click.option(
+    "--ssl-certfile",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Path to a TLS certificate (PEM) for native HTTPS termination. "
+    "Most deploys should terminate TLS at a reverse proxy or PaaS edge "
+    "instead (see deploy/docker/README.md); use this for standalone "
+    "servers with no proxy in front. Requires --ssl-keyfile unless the "
+    "file also bundles the private key.",
+)
+@click.option(
+    "--ssl-keyfile",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Path to the TLS private key (PEM) matching --ssl-certfile.",
+)
+@click.option(
+    "--ssl-keyfile-password",
+    default=None,
+    help="Password for an encrypted --ssl-keyfile, if any.",
+)
+@click.option(
     "--database-uri",
     default=None,
     help="Database URI for stores.  [default: sqlite at <data-dir>/chat.db, "
@@ -3221,6 +3242,9 @@ def server(
     ctx: click.Context,
     host: str,
     port: int,
+    ssl_certfile: str | None,
+    ssl_keyfile: str | None,
+    ssl_keyfile_password: str | None,
     database_uri: str | None,
     conversation_database_uri: str | None,
     artifact_location: str | None,
@@ -3241,6 +3265,13 @@ def server(
     :param ctx: Click invocation context used to tell whether
         ``--port`` came from the command line or from the default.
     :param port: TCP port to listen on, e.g. ``6767``.
+    :param ssl_certfile: Optional path to a TLS certificate (PEM) for
+        native HTTPS termination, e.g. ``"/etc/omnigent/cert.pem"``.
+        ``None`` binds plain HTTP.
+    :param ssl_keyfile: Optional path to the TLS private key (PEM)
+        matching ``ssl_certfile``.
+    :param ssl_keyfile_password: Optional password for an encrypted
+        ``ssl_keyfile``.
     :param database_uri: Optional database URI, e.g.
         ``"sqlite:///omnigent.db"``.
     :param artifact_location: Optional artifact location, e.g.
@@ -3269,6 +3300,11 @@ def server(
     port_was_explicit = port_source is click.core.ParameterSource.COMMANDLINE
     if port_was_explicit:
         _assert_server_port_bindable(host, port)
+
+    if ssl_keyfile and not ssl_certfile:
+        raise click.ClickException("--ssl-keyfile requires --ssl-certfile.")
+    if ssl_keyfile_password and not ssl_keyfile:
+        raise click.ClickException("--ssl-keyfile-password requires --ssl-keyfile.")
 
     # --admin-password is sugar for the INIT_ADMIN_PASSWORD env var that
     # bootstrap_admin already consumes — fold it in here so the rest of
@@ -3303,12 +3339,16 @@ def server(
     # port and must NOT consult or register in the shared pidfile, or it would
     # reuse/hijack the canonical server and exit without ever binding its port.
     # Likewise a non-loopback bind (`--host 0.0.0.0`, a real deploy) is exempt
-    # and binds the exact port.
+    # and binds the exact port. --ssl-certfile is exempt too: the canonical
+    # server's URL is recorded (and dialed by other tooling) as plain
+    # http://127.0.0.1:{port} — reusing that record for a TLS-terminating
+    # invocation would make callers speak http to an https-only socket.
     _is_canonical_local_server = (
         host in ("127.0.0.1", "localhost")
         and database_uri is None
         and artifact_location is None
         and not port_was_explicit
+        and ssl_certfile is None
     )
 
     # Single-user marker: ANY loopback-bound `omnigent server` running
@@ -3527,7 +3567,8 @@ def server(
             "OMNIGENT_ACCOUNTS_COOKIE_SECRET",
             load_or_generate_cookie_secret(art_loc),
         )
-        os.environ.setdefault("OMNIGENT_ACCOUNTS_BASE_URL", f"http://{host}:{port}")
+        _default_scheme = "https" if ssl_certfile else "http"
+        os.environ.setdefault("OMNIGENT_ACCOUNTS_BASE_URL", f"{_default_scheme}://{host}:{port}")
 
     auth_provider = create_auth_provider()
 
@@ -3672,6 +3713,9 @@ def server(
         ws_ping_interval=TUNNEL_KEEPALIVE_PING_INTERVAL_S,
         ws_ping_timeout=TUNNEL_KEEPALIVE_PING_TIMEOUT_S,
         timeout_graceful_shutdown=_SERVER_GRACEFUL_SHUTDOWN_TIMEOUT_S,
+        ssl_certfile=ssl_certfile,
+        ssl_keyfile=ssl_keyfile,
+        ssl_keyfile_password=ssl_keyfile_password,
     )
     try:
         _ShutdownSignalingServer(_config).run()

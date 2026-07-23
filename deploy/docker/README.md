@@ -155,7 +155,7 @@ OMNIGENT_OIDC_COOKIE_SECRET=<64-hex-chars>
 
 Most IdPs require HTTPS for non-localhost redirect URIs, and the
 session cookie uses the `__Host-` prefix which browsers only
-accept over HTTPS. Three options:
+accept over HTTPS. A few options, in order of preference:
 
 1. **Use the bundled Caddy overlay** (easiest — any VPS / EC2 / home
    server with a public domain):
@@ -178,6 +178,22 @@ accept over HTTPS. Three options:
    `omnigent:8000` over the docker network (or `127.0.0.1:8000`
    from the host). Examples: AWS ALB with ACM cert, Cloudflare in
    "Full" SSL mode, Fly.io / Cloud Run / Render platform certs.
+
+3. **Native TLS in the container** — for a standalone box with no
+   proxy in front and a cert you manage yourself (e.g. an existing
+   Let's Encrypt cert renewed by a host-level `certbot` timer). Mount
+   the cert/key into the container and point the server at them:
+
+   ```bash
+   # In .env, or as container env vars:
+   SSL_CERTFILE=/certs/fullchain.pem
+   SSL_KEYFILE=/certs/privkey.pem
+   ```
+
+   The server terminates HTTPS itself on `PORT` (still 8000 by
+   default) — publish that port directly instead of routing through
+   Caddy or another proxy. `OMNIGENT_ACCOUNTS_BASE_URL` defaults to
+   `https://` automatically once `SSL_CERTFILE` is set.
 
 ## Header-proxy mode (for deploys behind an existing SSO proxy)
 

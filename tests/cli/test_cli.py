@@ -1948,6 +1948,114 @@ def test_server_with_explicit_port_does_not_check_canonical_server(
     assert "Starting omnigent server on 127.0.0.1:44770" in result.output
 
 
+def test_server_command_rejects_ssl_keyfile_without_certfile(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """--ssl-keyfile without --ssl-certfile fails fast with a clear error.
+
+    uvicorn accepts a certfile-only bundle (cert + key in one PEM) but
+    never a keyfile-only config, so this is validated up front instead
+    of surfacing as a confusing failure deep inside uvicorn's TLS setup.
+    """
+    keyfile = tmp_path / "key.pem"
+    keyfile.write_text("fake-key")
+    monkeypatch.setenv("OMNIGENT_DATA_DIR", str(tmp_path / "data"))
+
+    result = CliRunner().invoke(
+        cli,
+        ["server", "--ssl-keyfile", str(keyfile), "--no-open"],
+    )
+
+    assert result.exit_code != 0
+    assert "--ssl-certfile" in result.output
+
+
+def test_server_command_passes_ssl_options_to_uvicorn_and_exempts_canonical_reuse(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """--ssl-certfile reaches uvicorn.Config and opts out of canonical-server reuse.
+
+    The canonical local-server record (``~/.omnigent/local_server.pid``) is
+    always dialed as plain ``http://127.0.0.1:<port>`` (local_server.py), so
+    a TLS-terminating bare ``omnigent server`` must never consult or
+    register in that shared record — otherwise other tooling would try to
+    speak http to an https-only socket. Regression target:
+    ``_is_canonical_local_server`` in cli.py dropping its ``ssl_certfile is
+    None`` condition.
+    """
+    import uvicorn
+    import uvicorn.server
+
+    captured: dict[str, Any] = {}
+
+    def _fake_server_run(self: Any) -> None:
+        """Skip the blocking server loop; capture the TLS config uvicorn got.
+
+        :param self: The uvicorn Server instance whose config holds all options.
+        :returns: None.
+        """
+        captured["uvicorn_kwargs"] = {
+            "ssl_certfile": self.config.ssl_certfile,
+            "ssl_keyfile": self.config.ssl_keyfile,
+            "ssl_keyfile_password": self.config.ssl_keyfile_password,
+        }
+
+    def _must_not_check_existing() -> str | None:
+        """Fail if --ssl-certfile still consults the canonical server record.
+
+        :returns: Never returns in this test.
+        """
+        raise AssertionError("--ssl-certfile must not check the canonical local server")
+
+    def _must_not_touch_pidfile(_port: int | None = None) -> None:
+        """Fail if --ssl-certfile still mutates the canonical server record.
+
+        :param _port: Optional port argument accepted for register calls.
+        :returns: Never returns in this test.
+        """
+        raise AssertionError("--ssl-certfile must not touch the shared pidfile")
+
+    from omnigent.host import local_server as _local_server_mod
+
+    monkeypatch.setattr(uvicorn.server.Server, "run", _fake_server_run)
+    monkeypatch.setattr(_local_server_mod, "local_server_url_if_healthy", _must_not_check_existing)
+    monkeypatch.setattr(_local_server_mod, "register_local_server", _must_not_touch_pidfile)
+    monkeypatch.setattr(_local_server_mod, "clear_local_server_record", _must_not_touch_pidfile)
+    monkeypatch.setenv("OMNIGENT_AUTH_ENABLED", "0")
+    monkeypatch.setenv("OMNIGENT_DATA_DIR", str(tmp_path / "data"))
+
+    certfile = tmp_path / "cert.pem"
+    keyfile = tmp_path / "key.pem"
+    certfile.write_text("fake-cert")
+    keyfile.write_text("fake-key")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "server",
+            "--host",
+            "127.0.0.1",
+            "--ssl-certfile",
+            str(certfile),
+            "--ssl-keyfile",
+            str(keyfile),
+            "--ssl-keyfile-password",
+            "hunter2",
+            "--no-open",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "already running" not in result.output
+    assert captured["uvicorn_kwargs"] == {
+        "ssl_certfile": str(certfile),
+        "ssl_keyfile": str(keyfile),
+        "ssl_keyfile_password": "hunter2",
+    }
+
+
 def test_server_command_explicit_occupied_port_fails() -> None:
     """
     An explicit ``--port`` must fail instead of choosing a replacement.

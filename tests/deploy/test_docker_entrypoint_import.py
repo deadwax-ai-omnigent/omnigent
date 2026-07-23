@@ -132,6 +132,42 @@ def test_resolve_config_rejects_non_s3_artifact_uri(
         _resolve_config()
 
 
+def test_resolve_config_defaults_ssl_unset(_entrypoint_env: None) -> None:
+    from deploy.docker.entrypoint import _resolve_config
+
+    resolved = _resolve_config()
+    assert resolved.ssl_certfile is None
+    assert resolved.ssl_keyfile is None
+    assert resolved.ssl_keyfile_password is None
+
+
+def test_resolve_config_captures_ssl_certfile_and_keyfile(
+    _entrypoint_env: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from deploy.docker.entrypoint import _resolve_config
+
+    certfile = tmp_path / "cert.pem"
+    keyfile = tmp_path / "key.pem"
+    monkeypatch.setenv("SSL_CERTFILE", str(certfile))
+    monkeypatch.setenv("SSL_KEYFILE", str(keyfile))
+    monkeypatch.setenv("SSL_KEYFILE_PASSWORD", "hunter2")
+
+    resolved = _resolve_config()
+    assert resolved.ssl_certfile == str(certfile)
+    assert resolved.ssl_keyfile == str(keyfile)
+    assert resolved.ssl_keyfile_password == "hunter2"
+
+
+def test_resolve_config_rejects_ssl_keyfile_without_certfile(
+    _entrypoint_env: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from deploy.docker.entrypoint import _resolve_config
+
+    monkeypatch.setenv("SSL_KEYFILE", str(tmp_path / "key.pem"))
+    with pytest.raises(RuntimeError, match="SSL_CERTFILE"):
+        _resolve_config()
+
+
 @pytest.mark.parametrize(
     ("artifact_store_uri", "expected_type"),
     [

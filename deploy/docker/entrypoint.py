@@ -29,6 +29,16 @@ Configuration is via environment variables:
                         Defaults to ``/data/artifacts`` (the volume
                         mount point used by docker-compose).
   HOST, PORT            Bind address. Default ``0.0.0.0:8000``.
+  SSL_CERTFILE          Optional path to a TLS certificate (PEM) for
+                        native HTTPS termination. Most deploys should
+                        instead terminate TLS at a reverse proxy or
+                        PaaS edge (see deploy/docker/README.md); this
+                        is for standalone containers with no proxy in
+                        front. Requires SSL_KEYFILE unless the file
+                        also bundles the private key.
+  SSL_KEYFILE           Path to the TLS private key (PEM) matching
+                        SSL_CERTFILE.
+  SSL_KEYFILE_PASSWORD  Password for an encrypted SSL_KEYFILE, if any.
 """
 
 from __future__ import annotations
@@ -74,6 +84,9 @@ class _ResolvedConfig:
     artifact_store_uri: str | None
     host: str
     port: int
+    ssl_certfile: str | None = None
+    ssl_keyfile: str | None = None
+    ssl_keyfile_password: str | None = None
 
 
 @dataclass(frozen=True)
@@ -152,6 +165,20 @@ def _resolve_config() -> _ResolvedConfig:
     port = int(cfg.get("port") or os.environ.get("PORT") or _DEFAULT_PORT)
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
+    # Native TLS termination is opt-in and rare in this deploy path — most
+    # containers sit behind a reverse proxy or PaaS edge that already
+    # terminates HTTPS (see deploy/docker/README.md). ``or None`` also turns
+    # compose's empty-string-when-unset ("${VAR:-}") into a real absence.
+    ssl_certfile = cfg.get("ssl_certfile") or os.environ.get("SSL_CERTFILE") or None
+    ssl_keyfile = cfg.get("ssl_keyfile") or os.environ.get("SSL_KEYFILE") or None
+    ssl_keyfile_password = (
+        cfg.get("ssl_keyfile_password") or os.environ.get("SSL_KEYFILE_PASSWORD") or None
+    )
+    if ssl_keyfile and not ssl_certfile:
+        raise RuntimeError(
+            "SSL_KEYFILE (or `ssl_keyfile:` in config) requires SSL_CERTFILE (or `ssl_certfile:`)."
+        )
+
     # Optional remote artifact store (S3 / Cloudflare R2 / MinIO / …). When set,
     # the artifact STORE is remote and durable; artifact_dir stays local for the
     # cookie secret and on-disk cache. Mirrors how DATABASE_URL selects the DB.
@@ -218,7 +245,7 @@ def _resolve_config() -> _ResolvedConfig:
             # Fly / HF Spaces) so a 1-click deploy needs zero manual config;
             # falls back to the bind address for local / Docker / EC2.
             os.environ["OMNIGENT_ACCOUNTS_BASE_URL"] = detect_base_url(
-                os.environ, host=host, port=port
+                os.environ, host=host, port=port, ssl_enabled=bool(ssl_certfile)
             )
 
     return _ResolvedConfig(
@@ -228,6 +255,9 @@ def _resolve_config() -> _ResolvedConfig:
         artifact_store_uri=artifact_store_uri,
         host=host,
         port=port,
+        ssl_certfile=ssl_certfile,
+        ssl_keyfile=ssl_keyfile,
+        ssl_keyfile_password=ssl_keyfile_password,
     )
 
 
@@ -396,6 +426,9 @@ def main() -> None:
             host=resolved.host,
             port=resolved.port,
             ws_max_size=RUNNER_TUNNEL_MAX_MESSAGE_BYTES,
+            ssl_certfile=resolved_config.ssl_certfile,
+            ssl_keyfile=resolved_config.ssl_keyfile,
+            ssl_keyfile_password=resolved_config.ssl_keyfile_password,
         )
     except Exception:  # noqa: BLE001 — startup catch-all so failures land in logs
         logger.error("FATAL: omnigent server failed to start:\n%s", traceback.format_exc())
