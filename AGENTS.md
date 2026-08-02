@@ -113,6 +113,12 @@ execute.
 Keep one `deadwax` → `main` PR permanently open as a view of the fork's custom
 diff. Do not merge it.
 
+Every other inherited upstream workflow is disabled at the repo level to keep
+the Actions bill down. A sync that replaces the workflow files re-registers them
+under new IDs in state `active`, so re-run the disable sweep in
+[`docs/deadwax-github-actions.md`](docs/deadwax-github-actions.md) after every
+major upstream sync.
+
 To update the fork, fetch upstream tags, create dated recovery refs, move
 `main` to the latest stable release, and rebase the Deadwax stack from its old
 release tag onto the new tag. Resolve conflicts by keeping upstream behavior
