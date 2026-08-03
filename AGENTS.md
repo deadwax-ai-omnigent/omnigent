@@ -125,5 +125,28 @@ release tag onto the new tag. Resolve conflicts by keeping upstream behavior
 and porting the branding into the current UI structure. Publish rewritten
 `deadwax` history only with `--force-with-lease`.
 
-Upstream contributions must branch from `upstream/main`, never `deadwax`.
-Follow upstream's issue and PR process and reference the issue from the PR.
+### Never send anything upstream without explicit approval
+
+**Do not create a pull request, issue, or comment on `omnigent-ai/omnigent` — or
+any repository the owner does not control — unless the owner has explicitly
+approved that specific action in the current conversation.**
+
+This is a hard stop, not a preference. It applies to every agent (Claude Code,
+Copilot, Cursor, and any other) and to every harness.
+
+- Before running `gh pr create`, check the target repository. If it is not
+  `deadwax-ai-omnigent/omnigent`, stop and ask first.
+- State plainly that the action is **public and upstream**, name the target
+  repository, and wait for a clear yes. Silence, a prior approval, or a general
+  "go ahead" on other work is not approval.
+- Creating a branch or writing a commit intended for upstream is **not**
+  authorization to open the PR. Do that work, then stop and ask.
+- Fork-internal PRs into `deadwax` need none of this ceremony.
+
+Rationale: an upstream PR is public, permanent, and attributed to the repository
+owner. It cannot be quietly undone. This rule exists because an agent once
+opened one on the owner's behalf without telling them.
+
+If — and only if — upstream contribution has been approved: branch from
+`upstream/main`, never `deadwax`, follow upstream's issue and PR process, and
+reference the issue from the PR.
