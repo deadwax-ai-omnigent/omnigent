@@ -31,6 +31,10 @@ omnigent/_build_info.py
 !.claude/
 .claude/*
 !.claude/skills/
+# Deadwax: the upstream-write guard must travel with the repo, not just live
+# on one machine.
+!.claude/settings.json
+!.claude/hooks/
 
 # Local helper scripts
 run-ap-chat.sh
