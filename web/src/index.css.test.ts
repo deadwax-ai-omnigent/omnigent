@@ -200,12 +200,12 @@ describe("index.css sidebar canvas", () => {
   )?.[0];
   const darkEdgeRule = cssSource.match(/\.dark \.conversations-sidebar \{[^}]*\}/)?.[0];
 
-  it("uses the specified left-to-right gradient for Omnigent light only", () => {
+  it("uses the specified left-to-right gradient for the default palette light only", () => {
     expect(omniLightRule).toContain("background: #fffefe");
     expect(omniLightRule).toContain(
-      "background: -webkit-linear-gradient(to right, #fffefe, #fcf6fa)",
+      "background: -webkit-linear-gradient(to right, #fffefe, #fdfaf4)",
     );
-    expect(omniLightRule).toContain("background: linear-gradient(to right, #fffefe, #fcf6fa)");
+    expect(omniLightRule).toContain("background: linear-gradient(to right, #fffefe, #fdfaf4)");
     expect(paletteRule).toContain("background: var(--sidebar)");
   });
 

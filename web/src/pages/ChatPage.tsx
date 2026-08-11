@@ -3653,8 +3653,10 @@ function AssistantBubble({
         className={isWide ? "max-w-full" : "max-w-3xl"}
       >
         {/* Deadwax skull marks each assistant turn inline, to the left of the
-            response — the chat-thread counterpart to the landing-page mascot. */}
-        <div className="flex gap-2.5">
+            response — the chat-thread counterpart to the landing-page mascot.
+            The row carries the wide-layout width so display math still spans
+            the bubble rather than shrinking to fit beside the mark. */}
+        <div className={`flex gap-2.5${isWide ? " w-full" : ""}`}>
           <img
             src="/skull-mark.svg"
             alt=""

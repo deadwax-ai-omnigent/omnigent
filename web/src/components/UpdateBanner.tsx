@@ -157,9 +157,7 @@ export function UpdateBanner({ variant = "floating" }: { variant?: "floating" | 
           )}
           {visibleStatus.state === "downloading" && (
             <>
-              <p className="font-medium text-foreground">
-                Downloading Deadwax update… {progress}%
-              </p>
+              <p className="font-medium text-foreground">Downloading Deadwax update… {progress}%</p>
               <Progress
                 value={progress}
                 className="mt-2 h-1.5"
