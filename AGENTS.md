@@ -99,7 +99,7 @@ requests.
 
 - `origin` is `deadwax-ai-omnigent/omnigent`.
 - `upstream` is `omnigent-ai/omnigent`.
-- `main` mirrors the latest stable upstream release tag (currently `v0.6.0`).
+- `main` mirrors the latest stable upstream release tag (currently `v0.9.0`).
 - `deadwax` is a linear stack of fork customizations on that release.
 - Short-lived change branches target `deadwax` and are squash-merged.
 

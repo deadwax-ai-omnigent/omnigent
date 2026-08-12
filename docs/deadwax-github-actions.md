@@ -24,7 +24,7 @@ edits), keeping only our own.
 
 ## Current state
 
-**Last full sweep: 2026-08-01.** Method: `gh workflow disable` on every `active`
+**Last full sweep: 2026-08-11.** Method: `gh workflow disable` on every `active`
 workflow except the two below.
 
 **Active (2):**
@@ -34,7 +34,7 @@ workflow except the two below.
 | `Deadwax · Upstream Release Check` (`.github/workflows/deadwax-upstream-sync.yml`) | Ours. Weekly; advances the `main` mirror and alerts on the tracking PR. Must stay enabled. |
 | `Dependency Graph` (`dynamic/dependabot/update-graph`) | **Not** a real Actions workflow — GitHub's built-in Dependabot dependency-graph updater. Runs on GitHub's infra, consumes zero Actions minutes, and the Actions API can't disable it. Harmless; disable via repo **Settings → Code security** if ever desired. |
 
-Everything else (66 entries) is `disabled_manually`.
+Everything else (78 entries) is `disabled_manually`.
 
 ## The trap: a major upstream sync re-registers workflows
 
@@ -109,6 +109,10 @@ gh api --paginate "repos/$FORK/actions/workflows" -q '.workflows[].id' \
 
 ## History
 
+- **2026-08-11** — Re-ran the sweep after the `v0.9.0` forward sync, which
+  re-registered 13 workflows under a third ID generation (`3324324xx`) in state
+  `active` — among them `Nightly Release` and the PR-hygiene bots that fire on
+  every push into `deadwax`. Registered total is now 80; active is back to 2.
 - **2026-08-01** — Re-ran the sweep over 32 workflows the `v0.6.0` sync had
   re-registered as new, `active` IDs (see "The trap" above). Dropped the old
   `Fork e2e mirror` exception — upstream removed that workflow in `v0.6.0`.
