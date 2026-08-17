@@ -75,7 +75,12 @@ from omnigent.host.git_worktree import (
     remove_worktree,
 )
 from omnigent.host.identity import HostIdentity, load_or_create_host_identity
-from omnigent.host.runner_zygote import ZygoteManager, ZygoteRunnerProc, ZygoteUnavailable
+from omnigent.host.runner_zygote import (
+    ZygoteManager,
+    ZygoteRunnerProc,
+    ZygoteStale,
+    ZygoteUnavailable,
+)
 from omnigent.inner import _proc
 from omnigent.onboarding.harness_auth import (
     adopt_env_credential,
@@ -1352,6 +1357,15 @@ class HostProcess:
                         proc.pid,
                     )
                     return proc, log_path
+                except ZygoteStale as exc:
+                    # The zygote is healthy, just holding a pre-upgrade import
+                    # graph while its runners finish. Take the direct-spawn path
+                    # WITHOUT latching the zygote off, so the launch after those
+                    # runners exit recycles it onto the new build.
+                    _logger.info(
+                        "Runner zygote holds an outdated build (%s); direct spawn for this launch",
+                        exc,
+                    )
                 except ZygoteUnavailable as exc:
                     # Disable the zygote for FUTURE launches, but do NOT stop it
                     # here: healthy runners already forked from it would see

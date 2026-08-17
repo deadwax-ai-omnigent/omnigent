@@ -10,7 +10,10 @@ This module owns:
 * :class:`ZygoteManager` — lazily spawns the zygote (a plain ``Popen`` of a
   fresh interpreter, so it never inherits the daemon's asyncio loop / threads),
   and exposes ``fork_runner`` plus the poll/terminate/kill primitives the
-  daemon needs.
+  daemon needs. It also owns the upgrade contract: a zygote whose build no
+  longer matches the package on disk is recycled once idle, and refused
+  (:class:`ZygoteStale`) while it still holds runners, because a fork would
+  hand the child a graph that no longer matches the files it imports lazily.
 * :class:`ZygoteRunnerProc` — a minimal stand-in for ``subprocess.Popen`` that
   ``_RunnerHandle`` and the daemon's watch/stop/cleanup paths use unchanged. The
   daemon is NOT the forked runner's OS parent, so ``poll``/``returncode``/
@@ -41,7 +44,7 @@ from typing import BinaryIO
 
 from omnigent.inner import _proc
 from omnigent.process_logging import child_logging_popen_kwargs
-from omnigent.runner._zygote import ZYGOTE_CONTROL_FD_ENV_VAR
+from omnigent.runner._zygote import ZYGOTE_CONTROL_FD_ENV_VAR, _disk_build_stamp
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +64,16 @@ class ZygoteUnavailable(RuntimeError):
     """The zygote could not be started or stopped responding.
 
     The daemon catches this and falls back to a direct ``Popen`` launch.
+    """
+
+
+class ZygoteStale(ZygoteUnavailable):
+    """The package was upgraded on disk under a zygote that still has children.
+
+    Distinct from a broken zygote: this one is healthy, just holding an
+    outdated import graph that no new child may inherit. The daemon falls back
+    to a direct ``Popen`` for this launch *without* latching the zygote off, so
+    a later launch can recycle it onto the new build once its runners are gone.
     """
 
 
@@ -149,6 +162,18 @@ class ZygoteManager:
         self._proc: subprocess.Popen[bytes] | None = None
         self._sock: socket.socket | None = None
         self._lock = threading.Lock()
+        # Serializes the staleness check with the fork it guards, so a recycle
+        # can never race a concurrent launch and stop a zygote that has just
+        # forked (that runner would orphan and tear itself down).
+        self._fork_lock = threading.Lock()
+        # Build stamp of the package as it was on disk when this zygote was
+        # spawned — i.e. the graph it imported. Compared against disk before
+        # every fork; see _recycle_if_stale.
+        self._build_stamp: tuple[float, str] | None = None
+        # Forked runner pids whose exit code the zygote still holds for us.
+        # Only an empty set makes the zygote safe to recycle: stopping it
+        # discards the codes it is holding, and a live runner would orphan.
+        self._unreaped: set[int] = set()
 
     @property
     def pid(self) -> int | None:
@@ -160,11 +185,27 @@ class ZygoteManager:
         return self._proc is not None and self._proc.poll() is None
 
     def start(self) -> None:
-        """Spawn the zygote if it is not already running.
+        """Spawn the zygote if it is not already running, or if it is outdated.
 
         The zygote is a fresh ``Popen`` interpreter (never a fork of this
         multithreaded async daemon). One end of an ``AF_UNIX`` socketpair is
         passed to it via ``pass_fds``; the daemon keeps the other end.
+
+        Recycling happens here rather than in :meth:`fork_runner` so the pid
+        the caller reads afterwards is the pid that will parent its runner —
+        the runner's orphan watchdog watches that number.
+
+        :raises ZygoteUnavailable: If the process could not be spawned or does
+            not answer an initial ping.
+        :raises ZygoteStale: If the package was upgraded under a zygote that
+            still holds forked runners, so it cannot be recycled yet.
+        """
+        with self._fork_lock:
+            self._recycle_if_stale()
+            self._start_locked()
+
+    def _start_locked(self) -> None:
+        """Spawn and ping the zygote. Callers hold :attr:`_fork_lock`.
 
         :raises ZygoteUnavailable: If the process could not be spawned or does
             not answer an initial ping.
@@ -173,6 +214,10 @@ class ZygoteManager:
             if self._proc is not None and self._proc.poll() is None:
                 return
             parent_sock, child_sock = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+            # Read the stamp before the spawn, never after: a rewrite landing
+            # between the two would then read as stale on the next fork, which
+            # is the safe direction to be wrong in.
+            build_stamp = _disk_build_stamp()
             try:
                 proc = self._spawn_zygote_process(child_sock.fileno())
             except OSError as exc:
@@ -184,6 +229,7 @@ class ZygoteManager:
             parent_sock.settimeout(_CONTROL_TIMEOUT_S)
             self._proc = proc
             self._sock = parent_sock
+            self._build_stamp = build_stamp
 
         # Confirm the zygote is answering before the caller relies on it. Any
         # failure here (bad pong, or the exchange itself raising on a timeout /
@@ -245,13 +291,52 @@ class ZygoteManager:
         :returns: A :class:`ZygoteRunnerProc` for the forked runner.
         :raises ZygoteUnavailable: If the zygote is down or reports a fork error.
         """
-        reply = self._exchange({"cmd": "fork", "env": env, "log_path": log_path})
-        if "error" in reply:
-            raise ZygoteUnavailable(f"zygote fork failed: {reply['error']}")
-        pid = reply.get("pid")
-        if not isinstance(pid, int):
-            raise ZygoteUnavailable(f"zygote returned no pid: {reply!r}")
+        with self._fork_lock:
+            reply = self._exchange({"cmd": "fork", "env": env, "log_path": log_path})
+            if "error" in reply:
+                raise ZygoteUnavailable(f"zygote fork failed: {reply['error']}")
+            pid = reply.get("pid")
+            if not isinstance(pid, int):
+                raise ZygoteUnavailable(f"zygote returned no pid: {reply!r}")
+            with self._lock:
+                self._unreaped.add(pid)
         return ZygoteRunnerProc(pid, self)
+
+    def _recycle_if_stale(self) -> None:
+        """Stop the running zygote when the package changed on disk under it.
+
+        The caller's :meth:`_start_locked` then spawns a replacement off the
+        new build.
+
+        A zygote only ever hands children the graph it imported at boot, so
+        after an in-place upgrade every fork is a mixed-version process: new
+        files for whatever the child imports lazily, old in-memory modules for
+        everything else. The zygote refuses such forks itself; recycling here
+        keeps the copy-on-write fast path instead of leaving the host on direct
+        spawns until the daemon restarts.
+
+        Only an idle zygote may be recycled. Stopping one that still holds
+        forked runners would orphan them (their watchdog tears them down) and
+        discard the exit codes it is holding for us, so a busy stale zygote
+        raises instead and this launch takes the direct-spawn path.
+
+        :raises ZygoteStale: If the build changed but the zygote is still busy.
+        """
+        with self._lock:
+            if self._proc is None or self._build_stamp == _disk_build_stamp():
+                return
+            busy = bool(self._unreaped)
+            old_pid = self._proc.pid
+        if busy:
+            raise ZygoteStale(
+                f"omnigent changed on disk under zygote pid={old_pid}, "
+                "which still holds forked runners"
+            )
+        logger.info(
+            "omnigent changed on disk; recycling the idle runner zygote (pid=%s)",
+            old_pid,
+        )
+        self.stop()
 
     def poll(self, pid: int) -> int | None:
         """Return the exit code for a forked runner, or ``None`` if still live.
@@ -262,6 +347,7 @@ class ZygoteManager:
         try:
             reply = self._exchange({"cmd": "poll", "pid": pid})
         except ZygoteUnavailable:
+            self._forget(pid)
             # The zygote (the runner's OS parent) died, so exit status can no
             # longer be recovered over the control socket. Probe the runner pid
             # directly: if it is gone, surface a dead-and-failed sentinel so the
@@ -270,7 +356,21 @@ class ZygoteManager:
             # report an eternal None for a process that has actually exited.
             return None if _proc.process_alive(pid) else _ZYGOTE_LOST_EXIT_CODE
         code = reply.get("returncode")
-        return code if isinstance(code, int) else None
+        if not isinstance(code, int):
+            return None
+        # The zygote no longer holds anything for this runner, so it stops
+        # standing between an upgraded package and a recycle.
+        self._forget(pid)
+        return code
+
+    def _forget(self, pid: int) -> None:
+        """Drop *pid* from the set of runners the zygote still answers for.
+
+        :param pid: The forked runner pid whose exit status has been collected
+            (or become uncollectable, the zygote having died).
+        """
+        with self._lock:
+            self._unreaped.discard(pid)
 
     def stop(self) -> None:
         """Terminate the zygote and close the control socket.
@@ -279,6 +379,9 @@ class ZygoteManager:
         watchdog, so no runner is left stranded.
         """
         with self._lock:
+            # Whatever exit codes it was holding die with it; poll() falls back
+            # to a direct pid probe from here on.
+            self._unreaped.clear()
             if self._sock is not None:
                 try:
                     self._sock.close()

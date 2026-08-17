@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import pytest
 
@@ -21,11 +23,14 @@ from omnigent.host.runner_zygote import (
     _ZYGOTE_LOST_EXIT_CODE,
     ZygoteManager,
     ZygoteRunnerProc,
+    ZygoteStale,
     ZygoteUnavailable,
 )
 from omnigent.runner._zygote import (
     _ZYGOTE_TEST_CHILD_EXIT_ENV_VAR,
     _ZYGOTE_TEST_CHILD_SLEEP_ENV_VAR,
+    _disk_build_stamp,
+    _ZygoteServer,
 )
 
 # The zygote is POSIX-only: these tests exercise os.fork() and pass_fds, which
@@ -633,3 +638,246 @@ def test_polled_harness_pid_is_released_from_its_owner(manager: ZygoteManager, t
     # Re-polling is None (code popped) and the zygote is still healthy.
     assert _control_exchange(manager, {"cmd": "poll", "pid": pid})["returncode"] is None
     assert _control_exchange(manager, {"cmd": "ping"}).get("pong") is True
+
+
+# ── Upgrade safety ────────────────────────────────────────────────
+#
+# A fork only ever shares the graph the zygote imported at boot, while the
+# child resolves its lazy imports from disk. An in-place upgrade (uv tool
+# install, pip install -U) rewrites the package under a long-lived zygote, so
+# every fork after it is a mixed-version process that dies on the first name
+# that moved between the two builds. The stamp comparison below is what keeps
+# those two halves in agreement.
+
+
+def _write_build_info(package_dir: Path, body: str) -> Path:
+    """Write a ``_build_info.py`` with *body* into *package_dir*.
+
+    :param package_dir: Directory to write the generated module into.
+    :param body: Module source.
+    :returns: The written path.
+    """
+    package_dir.mkdir(parents=True, exist_ok=True)
+    target = package_dir / "_build_info.py"
+    target.write_text(body)
+    return target
+
+
+def test_disk_build_stamp_reads_the_generated_module(tmp_path) -> None:
+    """The stamp is the ``(BUILD_TIME_EPOCH, COMMIT_SHA)`` pair on disk.
+
+    :param tmp_path: Temp dir standing in for the package directory.
+    """
+    _write_build_info(
+        tmp_path / "omnigent",
+        "BUILD_TIME_EPOCH: int = 1700000000\nCOMMIT_SHA: str = 'abc123'\n",
+    )
+    assert _disk_build_stamp(tmp_path / "omnigent") == (1700000000.0, "abc123")
+
+
+def test_disk_build_stamp_is_none_on_an_unbuilt_checkout(tmp_path) -> None:
+    """A source tree that was never built has no stamp to compare.
+
+    :param tmp_path: Temp dir standing in for the package directory.
+    """
+    assert _disk_build_stamp(tmp_path) is None
+
+
+def test_disk_build_stamp_is_none_for_a_half_written_module(tmp_path) -> None:
+    """A package caught mid-rewrite reads as unknown rather than raising.
+
+    :param tmp_path: Temp dir standing in for the package directory.
+    """
+    _write_build_info(tmp_path / "omnigent", "BUILD_TIME_EPOCH: int = 17000")
+    assert _disk_build_stamp(tmp_path / "omnigent") is None
+
+
+@pytest.fixture
+def upgraded_server():
+    """A ``_ZygoteServer`` whose on-disk build has moved since it booted.
+
+    :returns: ``(server, server_sock, client_sock)`` — handlers are called with
+        the server end, and the reply is read from the client end.
+    """
+    server_sock, client_sock = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    server = _ZygoteServer(server_sock, graph_stamp=(1.0, "old-build"))
+    try:
+        yield server, server_sock, client_sock
+    finally:
+        server._sel.close()
+        server_sock.close()
+        client_sock.close()
+
+
+def _reply_on(sock: socket.socket) -> dict:
+    """Read one newline-delimited JSON reply from *sock*.
+
+    :param sock: The socket the server answered on.
+    :returns: The decoded reply.
+    """
+    sock.settimeout(10.0)
+    buf = bytearray()
+    while b"\n" not in buf:
+        chunk = sock.recv(4096)
+        assert chunk, "zygote closed the socket without replying"
+        buf.extend(chunk)
+    return json.loads(bytes(buf).partition(b"\n")[0])
+
+
+@pytest.mark.parametrize(
+    ("handler", "request_body", "kind"),
+    [
+        ("_handle_fork", {"cmd": "fork", "env": {}, "log_path": None}, "runner"),
+        ("_handle_fork_harness", {"cmd": "fork_harness", "argv": [], "env": {}}, "harness"),
+    ],
+)
+def test_zygote_refuses_forks_after_an_in_place_upgrade(
+    upgraded_server, monkeypatch, handler: str, request_body: dict, kind: str
+) -> None:
+    """Both fork kinds error out instead of handing over a stale graph.
+
+    :param upgraded_server: The server fixture plus its client socket.
+    :param monkeypatch: Fixture used to move the on-disk stamp.
+    :param handler: The fork handler under test.
+    :param request_body: The protocol request to hand it.
+    :param kind: Child kind named in the refusal.
+    """
+    server, server_sock, client = upgraded_server
+    monkeypatch.setattr(
+        "omnigent.runner._zygote._disk_build_stamp", lambda *_a, **_kw: (2.0, "new-build")
+    )
+
+    getattr(server, handler)(server_sock, request_body)
+
+    reply = _reply_on(client)
+    assert f"mixed-version {kind}" in reply["error"]
+    # Nothing was forked: no child pid is being tracked for reaping.
+    assert not server._live
+
+
+@pytest.mark.parametrize(
+    ("handler", "request_body"),
+    [
+        ("_handle_fork", {"cmd": "fork", "env": {}, "log_path": None}),
+        ("_handle_fork_harness", {"cmd": "fork_harness", "argv": [], "env": {}}),
+    ],
+)
+def test_zygote_refuses_forks_when_the_stamp_goes_missing(
+    upgraded_server, monkeypatch, handler: str, request_body: dict
+) -> None:
+    """A package mid-rewrite (no readable stamp) is refused, not trusted.
+
+    Failing open here would fork exactly during the window when the files on
+    disk are least likely to agree with the imported graph.
+
+    :param upgraded_server: The server fixture plus its client socket.
+    :param monkeypatch: Fixture used to blank the on-disk stamp.
+    :param handler: The fork handler under test.
+    :param request_body: The protocol request to hand it.
+    """
+    server, server_sock, client = upgraded_server
+    monkeypatch.setattr("omnigent.runner._zygote._disk_build_stamp", lambda *_a, **_kw: None)
+
+    getattr(server, handler)(server_sock, request_body)
+
+    assert "refusing to fork" in _reply_on(client)["error"]
+    assert not server._live
+
+
+def test_unbuilt_checkout_still_forks(monkeypatch) -> None:
+    """Two unknown stamps compare equal, so dev checkouts keep the fast path.
+
+    :param monkeypatch: Fixture used to blank the on-disk stamp.
+    """
+    monkeypatch.setattr("omnigent.runner._zygote._disk_build_stamp", lambda *_a, **_kw: None)
+    server_sock, client = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    server = _ZygoteServer(server_sock, graph_stamp=None)
+    try:
+        assert server._refuse_if_upgraded(client, "runner") is False
+    finally:
+        server._sel.close()
+        server_sock.close()
+        client.close()
+
+
+def test_idle_zygote_is_recycled_onto_the_new_build(
+    manager: ZygoteManager, monkeypatch, tmp_path
+) -> None:
+    """An upgrade under an idle zygote re-spawns it instead of degrading.
+
+    :param manager: The started manager fixture.
+    :param monkeypatch: Fixture used to move the on-disk stamp.
+    :param tmp_path: Temp dir for the forked child's log.
+    """
+    original_pid = manager.pid
+    monkeypatch.setattr(
+        "omnigent.host.runner_zygote._disk_build_stamp", lambda *_a, **_kw: (2.0, "new-build")
+    )
+
+    manager.start()
+
+    assert manager.pid != original_pid
+    assert not _proc_alive(original_pid)
+    # The replacement is a working forkserver, not just a live process.
+    proc = manager.fork_runner(_fork_env(0), str(tmp_path / "runner.log"))
+    assert _wait_exit(proc) == 0
+
+
+def test_unchanged_build_keeps_the_same_zygote(manager: ZygoteManager) -> None:
+    """Without an upgrade, start() is the idempotent no-op it has always been.
+
+    :param manager: The started manager fixture.
+    """
+    original_pid = manager.pid
+    manager.start()
+    assert manager.pid == original_pid
+
+
+def test_busy_zygote_is_refused_rather_than_recycled(
+    manager: ZygoteManager, monkeypatch, tmp_path
+) -> None:
+    """Recycling under a live runner would orphan it, so the launch falls back.
+
+    :param manager: The started manager fixture.
+    :param monkeypatch: Fixture used to move the on-disk stamp.
+    :param tmp_path: Temp dir for the forked child's log.
+    """
+    original_pid = manager.pid
+    proc = manager.fork_runner(_sleep_env(30.0), str(tmp_path / "runner.log"))
+    monkeypatch.setattr(
+        "omnigent.host.runner_zygote._disk_build_stamp", lambda *_a, **_kw: (2.0, "new-build")
+    )
+
+    with pytest.raises(ZygoteStale):
+        manager.start()
+
+    assert manager.pid == original_pid
+    assert _proc_alive(proc.pid)
+    proc.kill()
+
+
+def test_recycle_resumes_once_the_last_runner_is_collected(
+    manager: ZygoteManager, monkeypatch, tmp_path
+) -> None:
+    """The zygote becomes recyclable again once no exit code is outstanding.
+
+    Otherwise one long session would pin the host to direct spawns until the
+    daemon restarts.
+
+    :param manager: The started manager fixture.
+    :param monkeypatch: Fixture used to move the on-disk stamp.
+    :param tmp_path: Temp dir for the forked child's log.
+    """
+    original_pid = manager.pid
+    proc = manager.fork_runner(_sleep_env(30.0), str(tmp_path / "runner.log"))
+    monkeypatch.setattr(
+        "omnigent.host.runner_zygote._disk_build_stamp", lambda *_a, **_kw: (2.0, "new-build")
+    )
+    with pytest.raises(ZygoteStale):
+        manager.start()
+
+    proc.kill()
+    assert _wait_exit(proc) != 0
+
+    manager.start()
+    assert manager.pid != original_pid
