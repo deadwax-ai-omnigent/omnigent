@@ -103,27 +103,23 @@ requests.
 - `deadwax` is a linear stack of fork customizations on that release.
 - Short-lived change branches target `deadwax` and are squash-merged.
 
-The weekly `deadwax-upstream-sync.yml` workflow advances the clean `main`
-mirror to the newest stable release and alerts on the open `deadwax` → `main`
-tracking PR when `deadwax` needs a manual rebase (or opens an issue if
-repository issues are enabled). Scheduled workflows run from the repository's
-default branch, which must remain `deadwax` for this fork-only workflow to
-execute.
+Syncing is automated by `scripts/deadwax/sync.sh`, run daily on the host that
+serves Deadwax via the `io.deadwax.omnigent-sync` launchd job. It adopts a new
+upstream stable release end to end — recovery ref, `main` mirror, rebase of the
+Deadwax stack, tests + wheel build, publish, install, restart, rollback on an
+unhealthy deploy — and stops for a human only when the rebase conflicts, filing
+an issue on the fork. See
+[`docs/deadwax-upstream-sync.md`](docs/deadwax-upstream-sync.md); resolve
+conflicts by keeping upstream behavior and porting the branding into the
+current UI structure, and publish rewritten `deadwax` history only with
+`--force-with-lease`.
 
-Keep one `deadwax` → `main` PR permanently open as a view of the fork's custom
-diff. Do not merge it.
-
-Every other inherited upstream workflow is disabled at the repo level to keep
-the Actions bill down. A sync that replaces the workflow files re-registers them
-under new IDs in state `active`, so re-run the disable sweep in
-[`docs/deadwax-github-actions.md`](docs/deadwax-github-actions.md) after every
-major upstream sync.
-
-To update the fork, fetch upstream tags, create dated recovery refs, move
-`main` to the latest stable release, and rebase the Deadwax stack from its old
-release tag onto the new tag. Resolve conflicts by keeping upstream behavior
-and porting the branding into the current UI structure. Publish rewritten
-`deadwax` history only with `--force-with-lease`.
+Every inherited upstream workflow is disabled at the repo level to keep the
+Actions bill down, and nothing in this fork depends on an Actions run. A sync
+that replaces the workflow files re-registers them under new IDs in state
+`active`; the sync job re-runs the disable sweep in
+[`docs/deadwax-github-actions.md`](docs/deadwax-github-actions.md) itself, so
+that is a check rather than a chore.
 
 ### Never send anything upstream without explicit approval
 

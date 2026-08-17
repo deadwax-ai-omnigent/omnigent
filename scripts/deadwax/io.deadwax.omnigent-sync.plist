@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Deadwax upstream sync. Install with:
+
+    cp scripts/deadwax/io.deadwax.omnigent-sync.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.deadwax.omnigent-sync.plist
+
+  Runs daily at 04:00 local rather than weekly: the pass is a no-op when
+  upstream has not cut a release, and a daily check means a release lands on
+  the host within a day instead of up to a week. RunAtLoad is off so
+  installing the job never restarts a stack somebody is using.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>io.deadwax.omnigent-sync</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/jasonmeans/code/personal/omnigent/scripts/deadwax/sync.sh</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>4</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <!-- The script logs its own transcript; these catch anything that escapes
+       it (a missing interpreter, a launchd-level failure). -->
+  <key>StandardOutPath</key>
+  <string>/Users/jasonmeans/.omnigent/logs/deadwax-sync-launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/jasonmeans/.omnigent/logs/deadwax-sync-launchd.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- launchd jobs get a minimal PATH; uv, gh, git and node all live in
+         these directories on this host. -->
+    <key>PATH</key>
+    <string>/Users/jasonmeans/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict>
+</plist>

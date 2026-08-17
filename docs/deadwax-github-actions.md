@@ -27,14 +27,16 @@ edits), keeping only our own.
 **Last full sweep: 2026-08-11.** Method: `gh workflow disable` on every `active`
 workflow except the two below.
 
-**Active (2):**
+**Active (1):**
 
 | Workflow | Why |
 |---|---|
-| `Deadwax · Upstream Release Check` (`.github/workflows/deadwax-upstream-sync.yml`) | Ours. Weekly; advances the `main` mirror and alerts on the tracking PR. Must stay enabled. |
 | `Dependency Graph` (`dynamic/dependabot/update-graph`) | **Not** a real Actions workflow — GitHub's built-in Dependabot dependency-graph updater. Runs on GitHub's infra, consumes zero Actions minutes, and the Actions API can't disable it. Harmless; disable via repo **Settings → Code security** if ever desired. |
 
-Everything else (78 entries) is `disabled_manually`.
+Everything else is `disabled_manually`, and nothing in this fork depends on an
+Actions run: the upstream sync moved to a scheduled job on the host that serves
+Deadwax (see [`deadwax-upstream-sync.md`](deadwax-upstream-sync.md)). The sweep
+below can therefore disable *everything* without breaking the fork.
 
 ## The trap: a major upstream sync re-registers workflows
 
@@ -50,8 +52,9 @@ stopped covering them and `Backwards-Compat` (every 12h), `Demo Check`
 started running and emailing again.
 
 **Re-run the sweep below after every major upstream sync**, and confirm the
-active count is back to 2. Two generations of IDs for the same workflow name is
-the tell.
+active count is back to 1. Two generations of IDs for the same workflow name is
+the tell. The sync job on the host re-runs the sweep itself after a successful
+sync, so this is now a check rather than a chore.
 
 ## Check the current state
 
@@ -69,14 +72,13 @@ gh workflow list --repo deadwax-ai-omnigent/omnigent --all --limit 100 \
 
 ## Re-disable (repeat the sweep)
 
-Disables everything except our upstream-release check. Safe to re-run; already
-disabled workflows are skipped.
+Disables every inherited workflow. Safe to re-run; already disabled workflows
+are skipped.
 
 ```bash
 gh workflow list --repo deadwax-ai-omnigent/omnigent --all --limit 100 \
   --json id,name,state \
   --jq '.[] | select(.state=="active")
-             | select(.name != "Deadwax · Upstream Release Check")
              | select(.name != "Dependency Graph") | .id' \
   | xargs -I{} gh workflow disable {} --repo deadwax-ai-omnigent/omnigent
 ```
