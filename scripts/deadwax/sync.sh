@@ -268,6 +268,20 @@ resweep_workflows() {
   done
 }
 
+branch_is_absorbed() {
+  # Is every commit on this branch already in deadwax? Two ways that happens:
+  # the branch is a plain ancestor, or it was squash-merged — which rewrites
+  # the commits, so ancestry says no while `git cherry` still recognises the
+  # patches by content. Anything with an unapplied commit ("+") is somebody's
+  # unfinished work and is left alone.
+  local branch="$1"
+  git -C "$CLONE" merge-base --is-ancestor "origin/$branch" origin/deadwax 2>/dev/null && return 0
+  local unapplied
+  unapplied="$(git -C "$CLONE" cherry origin/deadwax "origin/$branch" 2>/dev/null |
+    grep -c '^+' || true)"
+  [[ "$unapplied" == "0" ]]
+}
+
 prune_artifacts() {
   # Remote branches already folded into deadwax, and recovery refs old enough
   # that nobody is going back to them. Keeps the branch list a signal.
@@ -276,8 +290,9 @@ prune_artifacts() {
 
   while read -r branch; do
     [[ -z "$branch" ]] && continue
-    case "$branch" in main|deadwax|recovery/*) continue ;; esac
-    if git -C "$CLONE" merge-base --is-ancestor "origin/$branch" origin/deadwax 2>/dev/null; then
+    # HEAD is origin's symbolic default-branch pointer, not a branch.
+    case "$branch" in main|deadwax|HEAD|recovery/*) continue ;; esac
+    if branch_is_absorbed "$branch"; then
       log "pruning merged branch $branch"
       git -C "$CLONE" push --quiet origin --delete "$branch" || true
     fi
