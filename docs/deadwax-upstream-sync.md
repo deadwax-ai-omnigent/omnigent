@@ -56,6 +56,21 @@ current build.
 
 ### When it needs you
 
+Two channels, because they do different jobs. A **push notification** is the
+interrupt; the **GitHub issue** is the durable record holding the conflicted
+file list until the work is done.
+
+The push exists because the issue alone reaches nobody: the script
+authenticates as the repo owner, and GitHub never notifies you about your own
+activity. An issue filed by your own token is a silent issue.
+
+Pushes go through [ntfy.sh](https://ntfy.sh) to a private topic held in
+`~/.omnigent/deadwax-sync.env` (mode 600, never committed — the topic is an
+unlisted URL and anyone who knows it can read the alerts). Subscribe to that
+topic in the ntfy iOS app. Without the file the sync still runs and still files
+issues; it just cannot shout. Only three events push — conflicted rebase,
+failed deploy, release adopted — so a push always means something happened.
+
 It files a GitHub issue on this fork titled
 `[upstream-sync] Rebase Deadwax onto vX.Y.Z needs a human`, listing the
 conflicted files and the exact commands to reproduce the rebase. Resolve by
@@ -94,7 +109,12 @@ cp scripts/deadwax/io.deadwax.omnigent-sync.plist ~/Library/LaunchAgents/
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.deadwax.omnigent-sync.plist
 ```
 
-The plist hardcodes this host's paths; adjust them if the checkout moves.
+The job runs `~/.omnigent/bin/deadwax-sync.sh`, a stable copy rather than the
+working tree — an unattended 04:00 job must not depend on which branch someone
+left checked out. Each successful run refreshes that copy from the published
+`deadwax`, so the schedule stays on reviewed code without anyone remembering to
+reinstall it.
+
 Check on it with `launchctl print gui/$(id -u)/io.deadwax.omnigent-sync`.
 
 ## Why this is not a GitHub Action

@@ -36,6 +36,8 @@ CLONE="${DEADWAX_SYNC_CLONE:-$HOME/.omnigent/sync-checkout}"
 LOG_DIR="$HOME/.omnigent/logs"
 LOG_FILE="$LOG_DIR/deadwax-sync.log"
 LAUNCHD_LABEL="io.deadwax.omnigent-phone"
+# The copy the scheduled job actually executes; kept in step with `deadwax`.
+INSTALLED_COPY="$HOME/.omnigent/bin/deadwax-sync.sh"
 HEALTH_URL="http://127.0.0.1:6767/health"
 # How long the restarted stack gets to answer /health before we call it broken
 # and roll back. The watchdog re-checks every 20s and the server's cold import
@@ -44,6 +46,13 @@ HEALTH_TIMEOUT_S=180
 # Recovery refs older than this are pruned. Long enough to notice a bad sync
 # weeks later, short enough that the branch list stays readable.
 RECOVERY_KEEP_DAYS=90
+
+# Host-local settings, kept OUT of this public repo. Currently just
+# DEADWAX_NTFY_TOPIC — the ntfy.sh topic that pushes alarms to the phone.
+# Without it the script still files its GitHub issue; it just cannot shout.
+CONFIG_FILE="$HOME/.omnigent/deadwax-sync.env"
+# shellcheck source=/dev/null
+[[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
 
 DRY_RUN=0
 DEPLOY=1
@@ -81,8 +90,37 @@ die() {
   exit 1
 }
 
-# ── GitHub issue: the alarm channel ───────────────────────────────
+# ── Alarms ────────────────────────────────────────────────────────
 #
+# Two channels with different jobs. The GitHub issue is the durable record —
+# it holds the conflicted file list and survives until the work is done. The
+# push is the interrupt: GitHub cannot notify you about issues your own token
+# filed, so an issue alone is a message nobody receives.
+#
+# Only three events push: a conflicted rebase, a failed deploy, and a release
+# successfully adopted. Nightly no-op runs are silent, which is what keeps the
+# push worth reading.
+
+notify() {
+  local title="$1" body="$2" priority="${3:-default}"
+  if [[ -z "${DEADWAX_NTFY_TOPIC:-}" ]]; then
+    log "no DEADWAX_NTFY_TOPIC set; skipping push (see $CONFIG_FILE)"
+    return 0
+  fi
+  if [[ $DRY_RUN -eq 1 ]]; then
+    log "DRY-RUN would push: $title"
+    return 0
+  fi
+  # Never let a notification failure take down a sync that otherwise worked.
+  curl -sf --max-time 10 \
+    -H "Title: $title" \
+    -H "Priority: $priority" \
+    -H "Tags: vinyl" \
+    -d "$body" \
+    "https://ntfy.sh/${DEADWAX_NTFY_TOPIC}" >/dev/null 2>&1 ||
+    log "push notification failed (continuing)"
+}
+
 # One open issue per stuck release, reused rather than duplicated, so a month
 # of failed nightly runs is one thread and not thirty.
 
@@ -241,6 +279,9 @@ deploy() {
   else
     log "ROLLBACK ALSO FAILED — the stack may be down"
   fi
+  notify "Deadwax deploy failed" \
+    "$tag built and tested fine, but the restart never came back healthy. Rolled back to the previous build. See the issue on the fork." \
+    high
   issue_upsert "[upstream-sync] Deploy of $tag failed on the Deadwax host" \
     "Rebase onto \`$tag\` succeeded and passed verification, but installing
 \`$target_sha\` left the stack unhealthy (no answer from \`$HEALTH_URL\` within
@@ -251,6 +292,24 @@ See \`$LOG_FILE\` on the host."
 }
 
 # ── Housekeeping ──────────────────────────────────────────────────
+
+refresh_installed_copy() {
+  # launchd runs a stable copy under ~/.omnigent/bin rather than a developer
+  # working tree, whose branch at 04:00 is anybody's guess. Refreshing it from
+  # the published `deadwax` keeps the scheduled job on the reviewed version.
+  #
+  # Done at the END of a run and via mv, never cp-in-place: a shell reads its
+  # own script lazily, so overwriting the file it is executing corrupts the
+  # run. mv swaps the inode, leaving this process on the old one.
+  local src="$CLONE/scripts/deadwax/sync.sh"
+  [[ -f "$src" ]] || return 0
+  [[ $DRY_RUN -eq 1 ]] && { log "DRY-RUN would refresh $INSTALLED_COPY"; return 0; }
+  cmp -s "$src" "$INSTALLED_COPY" 2>/dev/null && return 0
+  mkdir -p "$(dirname "$INSTALLED_COPY")"
+  cp "$src" "$INSTALLED_COPY.new" && chmod +x "$INSTALLED_COPY.new" &&
+    mv -f "$INSTALLED_COPY.new" "$INSTALLED_COPY" &&
+    log "refreshed the scheduled copy at $INSTALLED_COPY"
+}
 
 resweep_workflows() {
   # An upstream sync rewrites .github/workflows/*, which GitHub re-registers as
@@ -333,6 +392,7 @@ main() {
     deadwax_sha="$(git -C "$CLONE" rev-parse origin/deadwax)"
     [[ $DEPLOY -eq 1 ]] && deploy "$deadwax_sha" "$base"
     prune_artifacts
+    refresh_installed_copy
     log "=== done ==="
     return 0
   fi
@@ -363,6 +423,9 @@ main() {
     local conflicts
     conflicts="$(git -C "$CLONE" diff --name-only --diff-filter=U | sed 's/^/- /')"
     git -C "$CLONE" rebase --abort || true
+    notify "Deadwax sync needs you" \
+      "Upstream released $latest, but replaying the Deadwax commits onto it hit conflicts. Nothing was published and the host is untouched. Details in the issue on the fork." \
+      high
     issue_upsert "[upstream-sync] Rebase Deadwax onto $latest needs a human" \
       "Upstream released **$latest** (the fork sits on \`$base\`). The clean
 \`main\` mirror has been updated and \`origin/$recovery\` holds the pre-sync
@@ -408,6 +471,9 @@ looks like now, then force-with-lease \`deadwax\` and re-run \`sync.sh\`."
   issue_close_for_tag "$latest"
   resweep_workflows
   prune_artifacts
+  refresh_installed_copy
+  notify "Deadwax updated to $latest" \
+    "Rebased, tested, deployed and healthy. The stack is running $latest with the Deadwax branding intact."
   log "=== done: Deadwax is on $latest ==="
 }
 

@@ -15,9 +15,12 @@
   <key>Label</key>
   <string>io.deadwax.omnigent-sync</string>
 
+  <!-- Deliberately NOT the developer working tree: whatever branch that tree
+       is left on is what would run unattended at 04:00. This copy is refreshed
+       from the published `deadwax` at the end of every successful run. -->
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/jasonmeans/code/personal/omnigent/scripts/deadwax/sync.sh</string>
+    <string>/Users/jasonmeans/.omnigent/bin/deadwax-sync.sh</string>
   </array>
 
   <key>StartCalendarInterval</key>
