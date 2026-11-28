@@ -3,13 +3,13 @@ import type * as UseChildSessionsModule from "@/hooks/useChildSessions";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import {
   BookOpenIcon,
-  BotIcon,
   Code2Icon,
   CompassIcon,
   FileTextIcon,
   FlaskConicalIcon,
   ScanSearchIcon,
   SearchIcon,
+  SkullIcon,
 } from "lucide-react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -138,8 +138,8 @@ const ICON_CASES: [string | null, ReturnType<typeof iconForAgentType>][] = [
   // dropped without a test failing.
   ["documentation", FileTextIcon],
   ["technical-writer", FileTextIcon],
-  ["general-purpose", BotIcon],
-  [null, BotIcon],
+  ["general-purpose", SkullIcon],
+  [null, SkullIcon],
 ];
 
 beforeEach(() => {
@@ -702,7 +702,7 @@ describe("SubagentsPanel", () => {
     const codexRow = childRow(container, "conv_codex_researcher");
     expect(codexRow).toHaveTextContent("Archimedes");
     expect(codexRow.querySelector('[data-harness-icon="codex"]')).not.toBeNull();
-    expect(codexRow.querySelector(".lucide-bot")).toBeNull();
+    expect(codexRow.querySelector(".lucide-skull")).toBeNull();
     expect(codexRow.querySelector(".lucide-book-open")).toBeNull();
   });
 
@@ -752,15 +752,15 @@ describe("SubagentsPanel", () => {
     const { container } = renderPanel({ rootSessionId: "conv_root" });
 
     // The pi glyph proves the row matched the scaffold child by agent name;
-    // a generic bot icon here means the pi branch was dropped or mis-keyed.
+    // a generic skull icon here means the pi branch was dropped or mis-keyed.
     const piRow = childRow(container, "conv_pi");
     expect(piRow.querySelector('[data-harness-icon="pi"]')).not.toBeNull();
 
     // A substring match (e.g. tool.includes("pi")) would wrongly brand this
-    // row; it must fall back to the generic bot icon.
+    // row; it must fall back to the generic skull icon.
     const pipelineRow = childRow(container, "conv_pipeline");
     expect(pipelineRow.querySelector('[data-harness-icon="pi"]')).toBeNull();
-    expect(pipelineRow.querySelector(".lucide-bot")).not.toBeNull();
+    expect(pipelineRow.querySelector(".lucide-skull")).not.toBeNull();
   });
 
   it("native wrapper labels outrank the pi tool-name match", () => {

@@ -71,6 +71,7 @@ import {
   stripAutomationContext,
 } from "@/lib/systemMessage";
 import { Button } from "@/components/ui/button";
+import deadwaxSkullMark from "@/assets/deadwax-skull-mark.svg";
 import { BrandLogo } from "@/components/BrandLogo";
 import { RunningDot } from "@/components/RunningDot";
 import { formatMessageTimestamp } from "@/lib/relativeTime";
@@ -1644,7 +1645,7 @@ function AssistantBubble({
         data-message-id={bubble.responseId}
         onClick={toggleActions}
         className={cn(
-          "mobile-app:gap-0",
+          "relative mobile-app:gap-0",
           spansFullColumn ? "max-w-full" : "max-w-[var(--chat-prose-width)]",
         )}
       >
@@ -1754,6 +1755,18 @@ function AssistantBubble({
               data={notice.data}
             />
           ) : null,
+        )}
+        {/* Deadwax skull marks the start of each assistant turn, out in the
+            left gutter so the reply's own layout is untouched. */}
+        {!errorNotice && !bubble.continued && (
+          <img
+            src={deadwaxSkullMark}
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+            data-testid="assistant-turn-mark"
+            className="pointer-events-none absolute top-0.5 -left-8 hidden size-5 select-none xl:block mobile-app:hidden"
+          />
         )}
       </Message>
 

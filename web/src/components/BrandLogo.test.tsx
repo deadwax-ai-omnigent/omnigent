@@ -14,11 +14,8 @@ vi.mock("@/lib/host", () => ({
 vi.mock("@/lib/identity", () => ({
   authenticatedFetch: (path: string) => authenticatedFetch(path),
 }));
-vi.mock("@/components/OttoEyes", () => ({
-  OttoEyes: () => <span data-testid="otto-eyes" />,
-}));
-vi.mock("@/components/icons/OttoIcon", () => ({
-  OttoIcon: () => <span data-testid="otto-icon" />,
+vi.mock("@/components/SkullSpinner", () => ({
+  SkullSpinner: () => <span data-testid="skull-spinner" />,
 }));
 
 import type { BrandLogo as BrandLogoComponent } from "./BrandLogo";
@@ -84,13 +81,13 @@ describe("BrandLogo", () => {
     expect(authenticatedFetch).not.toHaveBeenCalled();
   });
 
-  it("falls back to Otto when a standalone image fails to load", () => {
+  it("falls back to the skull when a standalone image fails to load", () => {
     getOmnigentHostConfig.mockReturnValue({ fetcher: undefined });
     render(logoTree(serverInfo("/v1/branding/logo/missing")));
 
     fireEvent.error(screen.getByRole("img", { name: "Acme Agent" }));
 
-    expect(screen.getByTestId("otto-eyes")).toBeInTheDocument();
+    expect(screen.getByTestId("skull-spinner")).toBeInTheDocument();
   });
 
   it("uses the host transport and an object URL in embedded deployments", async () => {
@@ -100,7 +97,7 @@ describe("BrandLogo", () => {
 
     render(logoTree(serverInfo("/v1/branding/logo/embed")));
 
-    expect(screen.getByTestId("otto-eyes")).toBeInTheDocument();
+    expect(screen.getByTestId("skull-spinner")).toBeInTheDocument();
     expect(await screen.findByRole("img", { name: "Acme Agent" })).toHaveAttribute(
       "src",
       "blob:brand-logo",
@@ -116,7 +113,7 @@ describe("BrandLogo", () => {
     render(logoTree(serverInfo("/v1/branding/logo/missing")));
 
     await waitFor(() => expect(authenticatedFetch).toHaveBeenCalledOnce());
-    expect(screen.getByTestId("otto-eyes")).toBeInTheDocument();
+    expect(screen.getByTestId("skull-spinner")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "Acme Agent" })).not.toBeInTheDocument();
   });
 
@@ -131,7 +128,7 @@ describe("BrandLogo", () => {
 
     fireEvent.error(image);
 
-    expect(screen.getByTestId("otto-eyes")).toBeInTheDocument();
+    expect(screen.getByTestId("skull-spinner")).toBeInTheDocument();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:brand-logo");
   });
 

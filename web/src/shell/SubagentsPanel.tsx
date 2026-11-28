@@ -18,7 +18,6 @@ import { lazy, Suspense, useState } from "react";
 import type { ComponentType, SVGProps } from "react";
 import {
   BookOpenIcon,
-  BotIcon,
   CheckIcon,
   CircleAlertIcon,
   CircleDotIcon,
@@ -36,6 +35,7 @@ import {
   PauseIcon,
   ScanSearchIcon,
   SearchIcon,
+  SkullIcon,
   UnplugIcon,
 } from "lucide-react";
 import { Link, useLocation } from "@/lib/routing";
@@ -216,7 +216,7 @@ const SETTLED_STATE: Record<AgentActivity, boolean> = {
  * role at a glance (Claude Code spawns many same-type "Explore" agents — the
  * icon distinguishes roles; the preview line below distinguishes instances).
  * Category icons are monochrome — the row applies the muted color; the
- * fallback is the generic bot icon.
+ * fallback is the Deadwax skull.
  *
  * @param tool - The agent type, e.g. ``"Explore"`` or ``"researcher"``;
  *   ``null`` when the child carries no type.
@@ -239,7 +239,7 @@ export function iconForAgentType(tool: string | null): AgentRowIcon {
   ) {
     return Code2Icon;
   }
-  return BotIcon;
+  return SkullIcon;
 }
 
 /**
@@ -323,7 +323,7 @@ function StatusAvatar({ activity, label, details }: AgentStatus) {
  * parent-children tree.
  *
  * The leading icon doubles as the agent-kind indicator: a Claude or
- * Codex glyph for the native wrappers, and a generic bot icon for
+ * Codex glyph for the native wrappers, and the generic skull icon for
  * everything else. Sub-agent rows nest below
  * with their own role icons, so the "main vs sub-agent" distinction
  * is carried by position + nesting connector rather than a pill.

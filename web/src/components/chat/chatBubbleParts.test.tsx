@@ -132,6 +132,41 @@ describe("Mermaid diagram width", () => {
   });
 });
 
+describe("AssistantBubble Deadwax turn mark", () => {
+  function renderReply(extra: Partial<Extract<Bubble, { kind: "assistant" }>> = {}) {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <BubbleView
+          bubble={{
+            kind: "assistant",
+            responseId: "resp_mark",
+            stableId: "mark",
+            lifecycle: "completed",
+            error: null,
+            items: [{ kind: "text", itemId: "mark_text", text: "hello", final: true }],
+            ...extra,
+          }}
+          isLastAssistant={false}
+        />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("marks a reply with a decorative skull in the gutter", () => {
+    renderReply();
+    const mark = screen.getByTestId("assistant-turn-mark");
+    expect(mark).toHaveAttribute("aria-hidden", "true");
+    expect(mark).toHaveClass("absolute");
+    // The mark trails the content so the bubble's first child stays the prose.
+    expect(screen.getByTestId("message-bubble").lastElementChild).toBe(mark);
+  });
+
+  it("leaves continuations of the same turn unmarked", () => {
+    renderReply({ continued: true });
+    expect(screen.queryByTestId("assistant-turn-mark")).toBeNull();
+  });
+});
+
 describe("AssistantBubble fork source", () => {
   const bubble: Extract<Bubble, { kind: "assistant" }> = {
     kind: "assistant",

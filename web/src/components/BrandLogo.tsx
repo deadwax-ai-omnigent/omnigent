@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { OttoEyes } from "@/components/OttoEyes";
-import { OttoIcon } from "@/components/icons/OttoIcon";
+import { SkullSpinner } from "@/components/SkullSpinner";
 import { withBasePath } from "@/lib/basePath";
 import { useAppName, useLogoUrl } from "@/lib/branding";
 import { authenticatedFetch } from "@/lib/identity";
@@ -87,11 +86,7 @@ function acquireLogo(path: string, generation: number): BlobUrlHandle {
 }
 
 function FallbackLogo({ className, variant }: { className?: string; variant: "eyes" | "icon" }) {
-  return variant === "eyes" ? (
-    <OttoEyes className={className} />
-  ) : (
-    <OttoIcon className={className} aria-hidden />
-  );
+  return <SkullSpinner className={className} decorative={variant === "icon"} />;
 }
 
 function EmbeddedBrandLogo({
@@ -158,8 +153,8 @@ function StandaloneBrandLogo({
 
 /**
  * The app's brand logo: the operator's custom logo when configured, else the
- * Otto mascot. `variant` picks the logo variant and matching fallback —
- * `"eyes"` (hero) → `main`/`OttoEyes`, `"icon"` (indicators) → `loading`/`OttoIcon`.
+ * spinning Deadwax skull. `variant` picks the logo variant — `"eyes"` (hero)
+ * → `main`, `"icon"` (indicators, decorative) → `loading`.
  */
 export function BrandLogo({
   className,

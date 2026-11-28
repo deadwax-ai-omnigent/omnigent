@@ -48,7 +48,10 @@ describe("sub-agent activity", () => {
         </MemoryRouter>,
       );
 
-      const children = screen.getByTestId("message-bubble").children;
+      // In-flow rows only: the Deadwax turn mark is absolutely positioned.
+      const children = [...screen.getByTestId("message-bubble").children].filter(
+        (child) => child.getAttribute("data-testid") !== "assistant-turn-mark",
+      );
       expect(children).toHaveLength(3);
       expect(children[0]).toContainElement(screen.getByTestId("assistant-text-section"));
       expect(children[1]).toContainElement(screen.getByRole("button", { name: "Copy" }));
