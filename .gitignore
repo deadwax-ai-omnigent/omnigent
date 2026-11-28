@@ -45,6 +45,10 @@ omnigent/_build_info.py
 !.claude/
 .claude/*
 !.claude/skills/
+# Deadwax: the upstream-write guard must travel with the repo, not just live
+# on one machine.
+!.claude/settings.json
+!.claude/hooks/
 
 # Exception: track .oss-scanner/ (OSS Scanner config) despite the .*/ rule above.
 !.oss-scanner/

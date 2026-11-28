@@ -215,3 +215,61 @@ instructions:
   not duplicate policy across adapters or add lifecycle metadata to `AgentSpec`.
 - If framework instructions grow beyond a small ordered list, introduce a
   structured `FrameworkInstructions` value at the prompt-composition boundary.
+
+## Deadwax fork
+
+This branch is the branded Deadwax fork of
+[`omnigent-ai/omnigent`](https://github.com/omnigent-ai/omnigent). Keep
+Deadwax-only branding, themes, and deployment changes out of upstream pull
+requests.
+
+- `origin` is `deadwax-ai-omnigent/omnigent`.
+- `upstream` is `omnigent-ai/omnigent`.
+- `main` mirrors the upstream tag `deadwax` is based on (currently the daily
+  build `v0.24.0.dev20261128`; the sync job moves it to each new stable release).
+- `deadwax` is a linear stack of fork customizations on that tag.
+- Short-lived change branches target `deadwax` and are squash-merged.
+
+Syncing is automated by `scripts/deadwax/sync.sh`, run daily on the host that
+serves Deadwax via the `io.deadwax.omnigent-sync` launchd job. It adopts a new
+upstream stable release end to end — recovery ref, `main` mirror, rebase of the
+Deadwax stack, tests + wheel build, publish, install, restart, rollback on an
+unhealthy deploy — and stops for a human only when the rebase conflicts, filing
+an issue on the fork. See
+[`docs/deadwax-upstream-sync.md`](docs/deadwax-upstream-sync.md); resolve
+conflicts by keeping upstream behavior and porting the branding into the
+current UI structure, and publish rewritten `deadwax` history only with
+`--force-with-lease`.
+
+Every inherited upstream workflow is disabled at the repo level to keep the
+Actions bill down, and nothing in this fork depends on an Actions run. A sync
+that replaces the workflow files re-registers them under new IDs in state
+`active`; the sync job re-runs the disable sweep in
+[`docs/deadwax-github-actions.md`](docs/deadwax-github-actions.md) itself, so
+that is a check rather than a chore.
+
+### Never send anything upstream without explicit approval
+
+**Do not create a pull request, issue, or comment on `omnigent-ai/omnigent` — or
+any repository the owner does not control — unless the owner has explicitly
+approved that specific action in the current conversation.**
+
+This is a hard stop, not a preference. It applies to every agent (Claude Code,
+Copilot, Cursor, and any other) and to every harness.
+
+- Before running `gh pr create`, check the target repository. If it is not
+  `deadwax-ai-omnigent/omnigent`, stop and ask first.
+- State plainly that the action is **public and upstream**, name the target
+  repository, and wait for a clear yes. Silence, a prior approval, or a general
+  "go ahead" on other work is not approval.
+- Creating a branch or writing a commit intended for upstream is **not**
+  authorization to open the PR. Do that work, then stop and ask.
+- Fork-internal PRs into `deadwax` need none of this ceremony.
+
+Rationale: an upstream PR is public, permanent, and attributed to the repository
+owner. It cannot be quietly undone. This rule exists because an agent once
+opened one on the owner's behalf without telling them.
+
+If — and only if — upstream contribution has been approved: branch from
+`upstream/main`, never `deadwax`, follow upstream's issue and PR process, and
+reference the issue from the PR.
