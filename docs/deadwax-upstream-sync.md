@@ -112,12 +112,25 @@ The stack is upstream's per-user host service plus Tailscale for the phone:
 
 ```bash
 uv tool install --python 3.12 "git+https://github.com/deadwax-ai-omnigent/omnigent@deadwax"
-omnigent host enable          # launchd ai.omnigent.host: local server on :6767 + host
-tailscale serve --bg --https=6767 http://127.0.0.1:6767
+origin="https://$(tailscale status --json | jq -r '.Self.DNSName | rtrimstr(".")'):6767"
+echo "export OMNIGENT_WS_ALLOWED_ORIGINS=\"$origin\"" >> ~/.zshenv
+launchctl setenv OMNIGENT_WS_ALLOWED_ORIGINS "$origin"
+OMNIGENT_WS_ALLOWED_ORIGINS="$origin" omnigent host enable   # ai.omnigent.host: server on :6767 + host
+tailscale serve --bg --tls-terminated-tcp=6767 tcp://127.0.0.1:6767
 ```
 
 The web UI is then at `https://<machine>.<tailnet>.ts.net:6767` from any
-device on the tailnet. Building needs Node 22+ and pnpm.
+device on the tailnet. Building needs Node 22+, pnpm and tmux 3.3+.
+
+Two traps, both of which leave the UI stuck on "Loading Deadwax…":
+
+- **Serve TCP, not HTTP.** `tailscale serve --https` proxies over HTTP/2, and
+  its proxy answers part of the UI's ~300 parallel module preloads with empty
+  502s. TLS-terminated TCP lets the browser use ordinary connection pooling.
+- **Allow the tailnet origin.** The local single-user server only accepts
+  WebSocket origins on loopback. It must see `OMNIGENT_WS_ALLOWED_ORIGINS`
+  however it is launched — by the service or by a terminal `omni` respawning
+  it — hence the service, `~/.zshenv` and `launchctl setenv`.
 
 ## Installing the schedule
 
