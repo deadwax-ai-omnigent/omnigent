@@ -74,4 +74,21 @@
     <path d="M 842,574 L 844,574 L 845,575 L 845,581 L 846,582 L 846,588 L 847,589 L 847,606 L 846,607 L 844,607 L 843,606 L 843,603 L 842,602 L 842,599 L 841,598 L 841,575 Z"/>
     <path d="M 914,243 L 914,245 L 913,246 L 911,246 L 910,247 L 908,247 L 907,248 L 906,248 L 905,249 L 903,249 L 902,250 L 901,250 L 900,251 L 898,251 L 897,252 L 896,252 L 895,253 L 894,253 L 893,254 L 892,254 L 891,255 L 890,255 L 889,256 L 888,256 L 887,257 L 886,257 L 885,258 L 884,258 L 883,259 L 882,259 L 881,260 L 880,260 L 879,261 L 878,261 L 877,262 L 873,262 L 872,263 L 870,263 L 869,264 L 867,264 L 866,263 L 866,261 L 867,260 L 868,260 L 869,259 L 871,259 L 872,258 L 874,258 L 875,257 L 877,257 L 878,256 L 879,256 L 880,255 L 881,255 L 882,254 L 883,254 L 884,253 L 885,253 L 886,252 L 887,252 L 888,251 L 889,251 L 890,250 L 891,250 L 892,249 L 893,249 L 894,248 L 895,248 L 896,247 L 898,247 L 899,246 L 900,246 L 901,245 L 903,245 L 904,244 L 906,244 L 907,243 L 910,243 L 911,242 L 913,242 Z"/>
   </g>
+  <!-- Developer-mode gear badge: marks this as the Deadwax dev console.
+       Scoped to the favicon only (the in-app skull mascot stays unbadged). -->
+  <g id="devGearBadge">
+    <circle cx="1530" cy="1530" r="480" fill="#11171C" stroke="#EDB978" stroke-width="44" />
+    <g transform="translate(1530 1530)" fill="#5B9BD5">
+      <rect x="-46" y="-300" width="92" height="132" rx="22" />
+      <rect x="-46" y="-300" width="92" height="132" rx="22" transform="rotate(45)" />
+      <rect x="-46" y="-300" width="92" height="132" rx="22" transform="rotate(90)" />
+      <rect x="-46" y="-300" width="92" height="132" rx="22" transform="rotate(135)" />
+      <rect x="-46" y="-300" width="92" height="132" rx="22" transform="rotate(180)" />
+      <rect x="-46" y="-300" width="92" height="132" rx="22" transform="rotate(225)" />
+      <rect x="-46" y="-300" width="92" height="132" rx="22" transform="rotate(270)" />
+      <rect x="-46" y="-300" width="92" height="132" rx="22" transform="rotate(315)" />
+      <circle r="212" />
+      <circle r="94" fill="#11171C" />
+    </g>
+  </g>
 </svg>
