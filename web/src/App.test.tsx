@@ -417,7 +417,7 @@ describe("Floating composer route", () => {
     floatingPage.suspend = true;
     renderRoute("/compose/floating", { floating_composer: true });
     expect(screen.getByRole("status")).toHaveClass("bg-background");
-    expect(screen.getByText("Loading Omnigent…")).toHaveClass("sr-only");
+    expect(screen.getByText("Loading Deadwax…")).toHaveClass("sr-only");
   });
 
   it("is not found with the flag off, or outside the desktop app", async () => {

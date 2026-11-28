@@ -10,7 +10,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import BlobGraphic from "./BlobGraphic";
-import omnigentLogo from "@/assets/omnigent-starfish-icon.png";
+import deadwaxSkullMark from "@/assets/deadwax-skull-mark.svg";
 import "./AnimatedOmnigentPanel.css";
 
 // Fixed card width + logo size — the flow only varies height/panelHeight per
@@ -54,7 +54,7 @@ export function AnimatedOmnigentPanel({
     <section
       className={`omnigent-card${autoHeight ? " omnigent-card--auto" : ""}`}
       style={{ width: CARD_WIDTH, ...(autoHeight ? {} : { height }) }}
-      aria-label="Omnigent onboarding"
+      aria-label="Deadwax onboarding"
     >
       <div className="omnigent-animated-panel" style={{ height: panelHeight, ...maskStyle }}>
         <BlobGraphic />
@@ -63,8 +63,8 @@ export function AnimatedOmnigentPanel({
           <div className="omnigent-panel-band-content">{bandContent}</div>
         ) : (
           <img
-            src={omnigentLogo}
-            alt="Omnigent"
+            src={deadwaxSkullMark}
+            alt="Deadwax"
             className={`omnigent-panel-logo${centeredLogo ? " omnigent-panel-logo--centered" : ""}`}
             style={{ width: LOGO_SIZE, height: LOGO_SIZE }}
           />

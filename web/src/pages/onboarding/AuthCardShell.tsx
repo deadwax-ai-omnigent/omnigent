@@ -5,7 +5,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { AnimatedOmnigentPanel } from "@/components/onboarding/AnimatedOmnigentPanel";
 import { useIsMobileViewport } from "@/hooks/useIsMobileViewport";
-import omnigentLogo from "@/assets/omnigent-starfish-icon.png";
+import deadwaxSkullMark from "@/assets/deadwax-skull-mark.svg";
 
 const DEFAULT_PANEL_HEIGHT = 220;
 const MIN_PANEL_HEIGHT = 200;
@@ -30,8 +30,8 @@ export function AuthCardShell({
       <div className="flex min-h-screen flex-col items-center bg-background px-4" style={padding}>
         <div className="flex w-full max-w-sm flex-1 flex-col justify-center gap-6">
           <img
-            src={omnigentLogo}
-            alt="Omnigent"
+            src={deadwaxSkullMark}
+            alt="Deadwax"
             className="mx-auto size-14 object-contain"
             aria-hidden="true"
           />

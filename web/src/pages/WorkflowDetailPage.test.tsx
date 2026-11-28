@@ -2153,7 +2153,7 @@ describe("WorkflowDetailPage", () => {
 
   describe("sharing", () => {
     const SHARING_INFO = { ...FALLBACK_SERVER_INFO, workflow_sharing: true };
-    const SHARING_OFF = "Sharing has been disabled for this Omnigent server.";
+    const SHARING_OFF = "Sharing has been disabled for this Deadwax server.";
     const UNSHAREABLE =
       "This workflow was saved before sharing was available. Clone it, then share the copy.";
     const SHARED: WorkflowDetail = {

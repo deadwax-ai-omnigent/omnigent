@@ -998,7 +998,7 @@ function ColorThemeControl() {
       : selectedPalette!;
   const paletteDescription =
     selection === "custom"
-      ? `Based on ${PALETTES.find((palette) => palette.id === customTheme.basePalette)?.label ?? "Omnigent"}`
+      ? `Based on ${PALETTES.find((palette) => palette.id === customTheme.basePalette)?.label ?? "Deadwax"}`
       : selectedPalette?.blurb;
 
   return (
@@ -1395,7 +1395,7 @@ function AppearanceSection() {
   };
 
   return (
-    <Section title="Appearance" description="Choose how Omnigent looks on this device.">
+    <Section title="Appearance" description="Choose how Deadwax looks on this device.">
       <div className="flex flex-col gap-6">
         <div key={resetKey} className="flex flex-col gap-6">
           <SettingsGroup title="Theme" testId="settings-group-theme">
@@ -1582,7 +1582,7 @@ function GitSection() {
   const info = useServerInfo();
   const archiveWorktreeCleanup = info !== "loading" && info.archive_worktree_cleanup === true;
   return (
-    <Section title="Git" description="Configure how Omnigent works with Git.">
+    <Section title="Git" description="Configure how Deadwax works with Git.">
       <SettingsGroup title="Worktrees" testId="settings-group-worktrees">
         <AlwaysUseWorktreeControl />
         <div className="mt-4 border-t border-border pt-4">
@@ -2269,7 +2269,7 @@ function GeneralSection() {
   const globalShortcut = supportsGlobalShortcut();
   const widenWindowForRightSidebar = supportsWidenWindowForRightSidebar();
   return (
-    <Section title="General" description="Configure general Omnigent behavior.">
+    <Section title="General" description="Configure general Deadwax behavior.">
       <div className="flex flex-col gap-6">
         <SettingsGroup title="Composer" testId="settings-group-composer">
           <ComposerSendShortcutControl />

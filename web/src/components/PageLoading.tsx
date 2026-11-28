@@ -5,7 +5,7 @@ import { Spinner } from "@/components/ui/spinner";
  * look already there while it boots, such as the desktop's New Agent panel.
  */
 export function PageLoading({
-  label = "Loading Omnigent…",
+  label = "Loading Deadwax…",
   quiet = false,
 }: {
   label?: string;

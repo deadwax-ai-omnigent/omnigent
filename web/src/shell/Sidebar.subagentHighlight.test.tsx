@@ -115,14 +115,14 @@ function rowFor(id: string): HTMLElement {
 }
 
 describe("sidebar highlight while viewing a sub-agent", () => {
-  it("renders the official Omnigent wordmark instead of styled text", () => {
+  it("renders the Deadwax skull mark alongside the wordmark text", () => {
     mockConversations([]);
     renderAt("/");
 
     const wordmark = screen.getByTestId("sidebar-wordmark");
-    expect(wordmark).toHaveAttribute("alt", "Omnigent");
-    expect(wordmark).toHaveClass("h-[15px]", "dark:invert");
-    expect(wordmark.getAttribute("src")).toContain("omnigent-wordmark");
+    expect(wordmark).toHaveAttribute("aria-hidden", "true");
+    expect(wordmark.getAttribute("src")).toContain("deadwax-skull-mark");
+    expect(screen.getByTestId("sidebar-brand")).toHaveTextContent("Deadwax");
   });
 
   it("sits flush to the window edge, no floating margin or border", () => {

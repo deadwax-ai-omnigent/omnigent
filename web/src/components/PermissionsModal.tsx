@@ -1135,8 +1135,8 @@ function QrCodeDialog({
           </DialogTitle>
           <DialogDescription>
             {filePath
-              ? "Scan with your phone's camera to open this file in the Omnigent app."
-              : "Scan with your phone's camera to open this session in the Omnigent app."}
+              ? "Scan with your phone's camera to open this file in the Deadwax app."
+              : "Scan with your phone's camera to open this session in the Deadwax app."}
           </DialogDescription>
         </DialogHeader>
         <div className="flex justify-center">
@@ -1149,7 +1149,7 @@ function QrCodeDialog({
               // mode; the padding also serves as the QR quiet zone.
               bgColor="#ffffff"
               fgColor="#000000"
-              aria-label={`QR code to open this ${filePath ? "file" : "session"} in the Omnigent app`}
+              aria-label={`QR code to open this ${filePath ? "file" : "session"} in the Deadwax app`}
             />
           </div>
         </div>

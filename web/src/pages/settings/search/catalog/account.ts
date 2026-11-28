@@ -5,7 +5,7 @@ export const ACCOUNT_PASSWORD_ENTRY = settingsEntry({
   available: (availability) => availability.accountsEnabled,
   section: "account",
   label: "Change password",
-  description: "Change the password you sign in to Omnigent with.",
+  description: "Change the password you sign in to Deadwax with.",
   keywords: ["password", "account", "sign in", "security"],
   parts: {
     change: "Change password",
@@ -31,7 +31,7 @@ export const ACCOUNT_SIGN_OUT_ENTRY = settingsEntry({
   id: "account-sign-out",
   section: "account",
   label: "Sign out",
-  description: "Sign out of Omnigent in this browser.",
+  description: "Sign out of Deadwax in this browser.",
   keywords: ["sign out", "log out", "logout", "account"],
   parts: { signOut: "Sign out" },
   focus: "signOut",

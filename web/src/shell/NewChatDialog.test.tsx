@@ -8366,9 +8366,7 @@ describe("NewChatLandingScreen", () => {
     renderLanding();
 
     await screen.findByTestId("new-chat-landing-input");
-    expect(screen.getByRole("heading", { name: "What should we build?" })).toHaveClass(
-      "text-[28px]",
-    );
+    expect(screen.getByRole("heading", { name: "What should we do?" })).toHaveClass("text-[28px]");
     expect(screen.queryByTestId("new-chat-landing-project-chip")).toBeNull();
   });
 

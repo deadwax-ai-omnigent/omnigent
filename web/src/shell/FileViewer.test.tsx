@@ -1610,7 +1610,7 @@ describe("FileViewer file sharing", () => {
 
   it("disables sharing and explains the server restriction", async () => {
     const onShare = vi.fn();
-    const reason = "Sharing has been disabled for this Omnigent server.";
+    const reason = "Sharing has been disabled for this Deadwax server.";
     renderViewer({ open: true, onShare, shareDisabledReason: reason });
 
     const button = screen.getByRole("button", { name: `Share file disabled: ${reason}` });

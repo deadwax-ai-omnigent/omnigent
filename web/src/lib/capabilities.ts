@@ -877,7 +877,7 @@ export function isSingleUserMode(info: ServerInfo | "loading"): boolean {
 }
 
 /** Why Share controls are disabled while the server turns sharing off. */
-export const SHARING_OFF_REASON = "Sharing has been disabled for this Omnigent server.";
+export const SHARING_OFF_REASON = "Sharing has been disabled for this Deadwax server.";
 
 /** Whether the server turns sharing off; `false` while the probe loads (fail open). */
 export function isSharingOff(info: ServerInfo | "loading"): boolean {

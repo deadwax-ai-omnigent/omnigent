@@ -1,8 +1,8 @@
 import type { Branding } from "./capabilities";
 import { useServerInfo } from "./CapabilitiesContext";
 
-export const DEFAULT_APP_NAME = "Omnigent";
-export const DEFAULT_HEADING = "What should we build?";
+export const DEFAULT_APP_NAME = "Deadwax";
+export const DEFAULT_HEADING = "What should we do?";
 
 const EMPTY_BRANDING: Branding = {
   app_name: null,

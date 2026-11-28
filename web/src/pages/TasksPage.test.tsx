@@ -936,7 +936,7 @@ describe("sharing from the row menu", () => {
     );
   });
 
-  const SHARING_OFF = "Sharing has been disabled for this Omnigent server.";
+  const SHARING_OFF = "Sharing has been disabled for this Deadwax server.";
   const LEGACY = "This is a legacy automation. Recreate it to share it.";
   it.each([
     ["while the server turns sharing off", "off" as const, true, SHARING_OFF],

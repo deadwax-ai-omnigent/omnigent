@@ -5825,7 +5825,7 @@ describe("AppShell file sharing", () => {
 
   it.each([
     ["http://localhost:6767", "on", "Sharing is unavailable from a local server."],
-    ["https://app.example.com", "off", "Sharing has been disabled for this Omnigent server."],
+    ["https://app.example.com", "off", "Sharing has been disabled for this Deadwax server."],
   ] as const)(
     "disables file sharing for %s with sharing mode %s",
     (origin, sharingMode, reason) => {
@@ -7011,7 +7011,7 @@ describe("AppShell share action", () => {
       expect(shareButton).toBeDisabled();
       expect(shareButton).toHaveAttribute(
         "title",
-        "Sharing has been disabled for this Omnigent server.",
+        "Sharing has been disabled for this Deadwax server.",
       );
     });
   });

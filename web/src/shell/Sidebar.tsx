@@ -147,7 +147,7 @@ import {
 } from "@/lib/sessionMute";
 import { Link, useLocation, useNavigate, useParams, useRebasePath } from "@/lib/routing";
 import { SidebarHeaderActions, SidebarSearchButton } from "./SidebarHeaderActions";
-import omnigentWordmark from "@/assets/omnigent-wordmark.svg";
+import deadwaxSkullMark from "@/assets/deadwax-skull-mark.svg";
 import { Button } from "@/components/ui/button";
 import { OmniGlassSurface } from "@/components/OmniGlassSurface";
 import {
@@ -1484,12 +1484,20 @@ function SidebarImpl({
                     {branding.app_name}
                   </span>
                 ) : (
-                  <img
-                    src={omnigentWordmark}
-                    alt="Omnigent"
-                    data-testid="sidebar-wordmark"
-                    className="h-[15px] w-auto shrink-0 translate-y-px max-md:h-[18px] dark:invert"
-                  />
+                  <span className="flex items-center gap-1.5">
+                    {/* Decorative mark; the adjacent text names the brand. */}
+                    <img
+                      src={deadwaxSkullMark}
+                      alt=""
+                      aria-hidden="true"
+                      draggable={false}
+                      data-testid="sidebar-wordmark"
+                      className="size-5 shrink-0 select-none max-md:size-6"
+                    />
+                    <span className="text-[15px] font-semibold tracking-tight max-md:text-[18px]">
+                      Deadwax
+                    </span>
+                  </span>
                 )}
               </Link>
               {isMacElectronShell() && (

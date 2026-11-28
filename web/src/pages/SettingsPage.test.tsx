@@ -570,7 +570,7 @@ describe("SettingsPage", () => {
   it("groups General settings into titled outlined cards and hides its description on mobile", () => {
     renderPage("/settings/general");
 
-    expect(screen.getByText("Configure general Omnigent behavior.")).toHaveClass("max-md:hidden");
+    expect(screen.getByText("Configure general Deadwax behavior.")).toHaveClass("max-md:hidden");
     expect(screen.queryByRole("switch", { name: "Admin view" })).toBeNull();
 
     for (const testId of [
@@ -890,7 +890,7 @@ describe("SettingsPage", () => {
     expect(
       screen.getByText("Sets interface and conversation text. Icons and spacing stay fixed."),
     ).toHaveClass("max-md:hidden");
-    expect(screen.getByText("Choose how Omnigent looks on this device.")).toHaveClass(
+    expect(screen.getByText("Choose how Deadwax looks on this device.")).toHaveClass(
       "max-md:hidden",
     );
     for (const testId of [
