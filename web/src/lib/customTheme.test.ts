@@ -138,27 +138,27 @@ describe("customTheme", () => {
     }
   });
 
-  it("keeps Omnigent's selection tint after contrast changes", () => {
+  it("keeps Deadwax's selection tint after contrast changes", () => {
     const theme = createCustomThemeFromPalette(PALETTES[0]);
     const variants = deriveCustomTheme({ ...theme, contrast: 53 });
 
-    expect(variants.light.selectionBackground).toBe("rgba(223, 60, 133, 0.1)");
-    expect(variants.light.selectionForeground).toBe("#651249");
-    expect(variants.dark.selectionBackground).toBe("rgba(223, 60, 133, 0.15)");
-    expect(variants.dark.selectionForeground).toBe("#f9a8d4");
+    expect(variants.light.selectionBackground).toBe("rgba(138, 93, 26, 0.14)");
+    expect(variants.light.selectionForeground).toBe("#5c4520");
+    expect(variants.dark.selectionBackground).toBe("rgba(237, 185, 120, 0.18)");
+    expect(variants.dark.selectionForeground).toBe("#f6dcb5");
   });
 
   it("tints the text selection with a custom accent, like the sidebar's active row", () => {
     const theme = createCustomThemeFromPalette(PALETTES[0]);
     const variants = deriveCustomTheme({ ...theme, accent: "#2563eb", darkAccent: "#f59e0b" });
 
-    expect(variants.light.selectionBackground).toBe("rgba(37, 99, 235, 0.1)");
-    expect(variants.dark.selectionBackground).toBe("rgba(245, 158, 11, 0.15)");
+    expect(variants.light.selectionBackground).toBe("rgba(37, 99, 235, 0.14)");
+    expect(variants.dark.selectionBackground).toBe("rgba(245, 158, 11, 0.18)");
     expect(variants.light.selectionForeground).toBe(variants.light.foreground);
     expect(variants.dark.selectionForeground).toBe(variants.dark.foreground);
   });
 
-  it("keeps Omnigent's selected-session colors after contrast changes", () => {
+  it("keeps Deadwax's selected-session colors after contrast changes", () => {
     const theme = createCustomThemeFromPalette(PALETTES[0]);
     const variants = deriveCustomTheme({ ...theme, contrast: 53 });
 

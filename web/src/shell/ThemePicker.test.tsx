@@ -84,8 +84,15 @@ describe("ThemePicker", () => {
   it("lists the current theme, Appearance, then the other palettes", () => {
     renderPicker();
     expect(optionLabels()).toEqual([
-      "Omnigent Default",
+      "Deadwax Default",
       "Appearance",
+      "Gurple Purple",
+      "Jimi",
+      "Record Store",
+      "Kill 'Em",
+      "Nikki",
+      "Billie",
+      "Ye",
       "Dracula",
       "GitHub",
       "Catppuccin",
@@ -98,10 +105,10 @@ describe("ThemePicker", () => {
     expect(screen.getByRole("option", { name: /Appearance/ })).toHaveTextContent("System");
   });
 
-  it("offers Omnigent Default and names the current palette when another is committed", () => {
+  it("offers Deadwax Default and names the current palette when another is committed", () => {
     act(() => commitThemePalette("nord"));
     renderPicker();
-    expect(optionLabels().slice(0, 3)).toEqual(["Current theme", "Appearance", "Omnigent Default"]);
+    expect(optionLabels().slice(0, 3)).toEqual(["Current theme", "Appearance", "Deadwax Default"]);
     expect(screen.getByRole("option", { name: /Current theme/ })).toHaveTextContent(
       "Nord · System",
     );
@@ -111,8 +118,8 @@ describe("ThemePicker", () => {
   it("previews highlighted palettes and restores the committed one on Escape", async () => {
     const input = renderPicker();
     await userEvent.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}");
-    expect(activeOption(input)).toHaveTextContent("GitHub");
-    await waitFor(() => expect(dataTheme()).toBe("github"));
+    expect(activeOption(input)).toHaveTextContent("Jimi");
+    await waitFor(() => expect(dataTheme()).toBe("jimi"));
     await userEvent.hover(screen.getByRole("option", { name: /^Nord/ }));
     await waitFor(() => expect(dataTheme()).toBe("nord"));
     // A row that isn't a palette shows the committed one.

@@ -1,5 +1,5 @@
 // Rows of the "Select theme" picker: the current theme, the Appearance page,
-// Omnigent Default, then the other palettes and Custom.
+// Deadwax Default, then the other palettes and Custom.
 
 import { ContrastIcon } from "lucide-react";
 
@@ -35,7 +35,7 @@ export function modeItemId(mode: ThemeMode): string {
   return `appearance:${mode}`;
 }
 
-const DEFAULT_THEME_LABEL = "Omnigent Default";
+const DEFAULT_THEME_LABEL = "Deadwax Default";
 const CUSTOM_LABEL = "Custom";
 
 export interface ThemePickerContext {

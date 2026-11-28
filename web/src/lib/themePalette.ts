@@ -4,7 +4,7 @@
 //
 //   1. MODE  — light / dark / system, owned by next-themes (toggles the
 //      `.dark` class on <html>; see components/theme/ThemeProvider.tsx).
-//   2. PALETTE — the color scheme (Omni pink, GitHub, Vercel, …), owned here.
+//   2. PALETTE — the color scheme (Deadwax Blue & Gold, Jimi, GitHub, …), owned here.
 //
 // A palette is applied as a `data-theme` attribute on <html>, so it composes
 // with the mode class: `:root:not(.dark)[data-theme="github"]` is GitHub-light
@@ -25,10 +25,19 @@
 import { getThemeRoots } from "./host.ts";
 
 const STORAGE_KEY = "omnigent:ui-theme-palette";
+// Where the original Deadwax theme menu stored its choice ("gold-blue" is now "omni").
+const LEGACY_DEADWAX_STORAGE_KEY = "deadwax_theme_preference_v1";
 
 /** Selectable color palettes. The first entry is the default (brand) look. */
 export const themePalettes = [
   "omni",
+  "purple",
+  "jimi",
+  "record-store",
+  "red-black",
+  "hornet",
+  "billie",
+  "ye",
   "dracula",
   "github",
   "catppuccin",
@@ -43,7 +52,7 @@ export type ThemePalette = (typeof themePalettes)[number];
 export const themeSelections = [...themePalettes, "custom"] as const;
 export type ThemeSelection = (typeof themeSelections)[number];
 
-/** Default palette: the Omni brand tokens already defined in `:root` / `.dark`. */
+/** Default palette: Deadwax Blue & Gold (kept under the "omni" id for stored preferences). */
 export const DEFAULT_PALETTE: ThemePalette = "omni";
 
 /** A few representative colors used to render a palette's preview swatch. */
@@ -216,89 +225,282 @@ export interface PaletteMeta {
   };
 }
 
+/** Source colors for the Deadwax presets; each one is a single dark look. */
+interface DeadwaxPresetColors {
+  bg: string;
+  bgSecondary: string;
+  surface: string;
+  surfaceHover: string;
+  card: string;
+  text: string;
+  textMuted: string;
+  textInverse: string;
+  accent: string;
+  /** Link color, when the accent itself is too dim to read as text. */
+  link?: string;
+  border: string;
+  borderStrong: string;
+  /** Selection wash alphas, tuned so each accent stays visible but readable. */
+  selectionAlpha?: number;
+  codeSelectionAlpha?: number;
+  /** Selected-text color, when the body text is too dim over the wash. */
+  selectionForeground?: string;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// The presets are dark-only, so light mode reuses the dark tokens (with a
+// gradient canvas, since only dark mode paints the shell from --background).
+function deadwaxPreset(
+  id: ThemePalette,
+  label: string,
+  blurb: string,
+  c: DeadwaxPresetColors,
+): PaletteMeta {
+  const swatch: PaletteSwatch = {
+    bg: c.bg,
+    card: c.card,
+    accent: c.accent,
+    border: c.border,
+    text: c.text,
+  };
+  const tokens = (shellBackground: string) =>
+    paletteTokens({
+      background: c.bg,
+      foreground: c.text,
+      card: c.card,
+      cardSolid: c.card,
+      tray: c.bgSecondary,
+      popover: c.card,
+      primary: c.accent,
+      link: c.link ?? c.accent,
+      primaryForeground: c.textInverse,
+      selectionBackground: hexToRgba(c.accent, c.selectionAlpha ?? 0.3),
+      codeSelection: hexToRgba(c.accent, c.codeSelectionAlpha ?? 0.24),
+      selectionForeground: c.selectionForeground ?? c.text,
+      secondary: c.surface,
+      muted: c.surface,
+      mutedForeground: c.textMuted,
+      codeBackground: c.surface,
+      accent: c.surfaceHover,
+      accentForeground: c.text,
+      border: c.border,
+      borderStrong: c.borderStrong,
+      ring: c.accent,
+      sidebar: c.bgSecondary,
+      shellBackground,
+    });
+  return {
+    id,
+    label,
+    blurb,
+    light: swatch,
+    dark: swatch,
+    tokens: {
+      light: tokens(
+        `radial-gradient(ellipse at 20% 50%, ${hexToRgba(c.accent, 0.1)} 0%, transparent 50%), linear-gradient(145deg, ${c.bgSecondary} 0%, ${c.bg} 50%, ${c.bgSecondary} 100%)`,
+      ),
+      dark: tokens("var(--background)"),
+    },
+  };
+}
+
+const DEADWAX_PRESETS: readonly PaletteMeta[] = [
+  deadwaxPreset("purple", "Gurple Purple", "Deep violet with an electric-purple accent.", {
+    bg: "#0e0914",
+    bgSecondary: "#170c21",
+    surface: "#221130",
+    surfaceHover: "#2a153c",
+    card: "#1a1025",
+    text: "#f3eaff",
+    textMuted: "#bca9d9",
+    textInverse: "#ffffff",
+    accent: "#8b2eff",
+    link: "#b57bff",
+    border: "#34184d",
+    borderStrong: "#5f4280",
+  }),
+  deadwaxPreset("jimi", "Jimi", "Purple haze with a vivid magenta lead.", {
+    bg: "#160c1c",
+    bgSecondary: "#201228",
+    surface: "#2f1a3a",
+    surfaceHover: "#3a2048",
+    card: "#24142d",
+    text: "#f6eafc",
+    textMuted: "#c4aad3",
+    textInverse: "#ffffff",
+    accent: "#c62cb8",
+    link: "#e070d6",
+    border: "#3a2048",
+    borderStrong: "#643e7a",
+  }),
+  deadwaxPreset("record-store", "Record Store", "Warm black vinyl with a worn-gold accent.", {
+    bg: "#0c0d0b",
+    bgSecondary: "#171815",
+    surface: "#22231e",
+    surfaceHover: "#2a2b25",
+    card: "#1b1b18",
+    text: "#f3efe4",
+    textMuted: "#b9b2a3",
+    textInverse: "#0c0d0b",
+    accent: "#d9a441",
+    border: "#303126",
+    borderStrong: "#505247",
+  }),
+  deadwaxPreset("red-black", "Kill 'Em", "Near-black surfaces cut with signal red.", {
+    bg: "#090405",
+    bgSecondary: "#160709",
+    surface: "#231013",
+    surfaceHover: "#301318",
+    card: "#170a0c",
+    text: "#f6edee",
+    textMuted: "#c7a8ac",
+    textInverse: "#090405",
+    accent: "#d72638",
+    link: "#ef5a68",
+    border: "#3a0d11",
+    borderStrong: "#573139",
+  }),
+  deadwaxPreset("hornet", "Nikki", "Black, red, and gold with hornet energy.", {
+    bg: "#000000",
+    bgSecondary: "#090909",
+    surface: "#121212",
+    surfaceHover: "#191919",
+    card: "#0d0d0d",
+    text: "#d6a84f",
+    textMuted: "#d71920",
+    textInverse: "#000000",
+    accent: "#d71920",
+    link: "#d6a84f",
+    codeSelectionAlpha: 0.3,
+    border: "#1b1b1b",
+    borderStrong: "#3a3935",
+  }),
+  deadwaxPreset("billie", "Billie", "Midnight navy lit by acid green.", {
+    bg: "#071426",
+    bgSecondary: "#0b1d35",
+    surface: "#102a4f",
+    surfaceHover: "#143460",
+    card: "#0b203c",
+    text: "#eaf3ff",
+    textMuted: "#a6bedc",
+    textInverse: "#071426",
+    accent: "#a6ff00",
+    selectionAlpha: 0.22,
+    codeSelectionAlpha: 0.16,
+    border: "#153b70",
+    borderStrong: "#2e4d73",
+  }),
+  deadwaxPreset("ye", "Ye", "Severe monochrome in near-black graphite.", {
+    bg: "#000000",
+    bgSecondary: "#050505",
+    surface: "#0b0b0b",
+    surfaceHover: "#101010",
+    card: "#070707",
+    text: "#6a6a6a",
+    textMuted: "#4a4a4a",
+    textInverse: "#000000",
+    accent: "#5a5a5a",
+    link: "#8a8a8a",
+    selectionAlpha: 0.4,
+    codeSelectionAlpha: 0.4,
+    selectionForeground: "#b0b0b0",
+    border: "#141414",
+    borderStrong: "#3a3a3a",
+  }),
+];
+
 // Swatch colors are a hand-picked summary used for mini-previews.
 export const PALETTES: readonly PaletteMeta[] = [
   {
     id: "omni",
-    label: "Omnigent",
-    blurb: "The signature pink brand look.",
+    label: "Blue & Gold",
+    blurb: "The signature Deadwax gold on midnight blue.",
     light: {
-      bg: "#fdf7fb",
+      bg: "#fdfafa",
       card: "#ffffff",
-      accent: "#df3c85",
+      accent: "#edb978",
       border: "#e8ecf0",
       text: "#11171c",
     },
-    dark: { bg: "#160e24", card: "#28223a", accent: "#df3c85", border: "#2a2440", text: "#f4f5f7" },
+    dark: { bg: "#111318", card: "#1d2028", accent: "#edb978", border: "#2a2f3a", text: "#ece8e1" },
     tokens: {
       light: paletteTokens({
         background: "#ffffff",
-        foreground: "#27272a",
+        foreground: "#11171c",
         card: "#ffffff",
         cardSolid: "#ffffff",
         popoverForeground: "#11171c",
-        primary: "#df3c85",
-        link: "#c42f70",
+        // Amber Glow is too light for text and white labels on a light canvas,
+        // so light mode leads with a deeper cut of the same gold.
+        primary: "#8a5d1a",
+        link: "#2a66a0",
         primaryForeground: "#ffffff",
-        selectionBackground: "rgba(223, 60, 133, 0.1)",
-        codeSelection: "rgba(223, 60, 133, 0.2)",
-        selectionForeground: "#651249",
+        selectionBackground: "rgba(138, 93, 26, 0.14)",
+        codeSelection: "rgba(138, 93, 26, 0.2)",
+        selectionForeground: "#5c4520",
         secondary: "#eceef1",
         muted: "#0000000f",
         mutedForeground: "#71717a",
         codeBackground: "#0000000f",
         accent: "#f2f1f2",
-        accentForeground: "#27272a",
-        border: "#e4e4e7",
+        accentForeground: "#11171c",
+        border: "#e8ecf0",
         borderStrong: "#a1a1aa",
         buttonBorder: "#d6d6d6",
-        ring: "#11171c",
-        brandAccent: "#df3c85",
-        sidebar: "#f9f9f9",
-        sidebarPrimary: "var(--link)",
-        sidebarRing: "var(--ring)",
-        shellBackground: "var(--background)",
+        input: "#e8ecf0",
+        ring: "#edb978",
+        brandAccent: "#edb978",
+        sidebar: "#fdfafa",
+        sidebarPrimary: "#edb978",
+        sidebarPrimaryForeground: "#11171c",
+        sidebarBackground: "linear-gradient(to right, #fffefe, #fdfaf4)",
+        shellBackground:
+          "radial-gradient(ellipse at 20% 50%, rgb(237 185 120 / 8%) 0%, transparent 50%), linear-gradient(145deg, #fffdfa 0%, #fdfafa 52%, #f8f4ee 100%)",
       }),
       dark: paletteTokens({
-        background: "#0e0b19",
-        foreground: "#f5f5f4",
-        card: "rgba(31, 39, 45, 0.6)",
-        cardSolid: "#181f25",
-        popover: "rgba(26, 33, 41, 0.8)",
-        primary: "#df3c85",
-        link: "#e65a9c",
-        primaryForeground: "#11171c",
-        // pink-300 rather than the sidebar's pink-400 so selected text stays
-        // >= 4.5:1 over the tinted code and muted surfaces.
-        selectionBackground: "rgba(223, 60, 133, 0.15)",
-        codeSelection: "rgba(223, 60, 133, 0.25)",
-        selectionForeground: "#f9a8d4",
-        secondary: "#1f272d",
-        secondaryForeground: "#e8ecf0",
-        muted: "rgb(255 255 255 / 12%)",
-        mutedForeground: "rgb(245 245 244 / 56%)",
-        codeBackground: "oklch(0.38 0.005 240)",
-        accent: "#28262e",
-        accentForeground: "#f5f5f4",
-        border: "oklch(0.28 0.005 240)",
-        borderStrong: "#a1a1aa",
-        buttonBorder: "#d6d6d6",
+        background: "#111318",
+        foreground: "#ece8e1",
+        card: "rgba(29, 32, 40, 0.72)",
+        cardSolid: "#1d2028",
+        tray: "rgba(26, 29, 36, 0.78)",
+        popover: "rgba(29, 32, 40, 0.94)",
+        primary: "#edb978",
+        link: "#5b9bd5",
+        primaryForeground: "#111318",
+        selectionBackground: "rgba(237, 185, 120, 0.18)",
+        codeSelection: "rgba(237, 185, 120, 0.2)",
+        selectionForeground: "#f6dcb5",
+        secondary: "#22262f",
+        secondaryForeground: "#ece8e1",
+        muted: "#22262f",
+        mutedForeground: "#9ba3b2",
+        codeBackground: "#22262f",
+        accent: "#2a2f3a",
+        accentForeground: "#ece8e1",
+        border: "#2a2f3a",
+        borderStrong: "#3d434d",
+        buttonBorder: "#2a2f3a",
         input: "rgb(255 255 255 / 15%)",
-        ring: "#e8ecf0",
-        brandAccent: "#df3c85",
-        sidebar: "#0e0b19",
-        sidebarPrimary: "var(--link)",
-        sidebarPrimaryForeground: "oklch(0.12 0.004 240)",
-        sidebarAccent: "oklch(0.245 0.005 240)",
-        sidebarAccentForeground: "oklch(0.965 0.003 240)",
-        sidebarBorder: "oklch(0.28 0.005 240)",
-        sidebarRing: "oklch(0.92 0.003 240 / 0.4)",
+        ring: "#edb978",
+        brandAccent: "#edb978",
+        sidebar: "#111318",
+        sidebarPrimary: "#edb978",
+        sidebarPrimaryForeground: "#11171c",
+        sidebarAccent: "#2a2f3a",
+        sidebarAccentForeground: "#ece8e1",
+        sidebarBorder: "#2a2f3a",
+        sidebarRing: "#edb978",
         sidebarBackground:
-          "linear-gradient(transparent 35%, rgba(92, 48, 108, 0.2)), linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 60%)",
+          "linear-gradient(transparent 35%, rgba(237, 185, 120, 0.08)), linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 60%)",
         shellBackground: "var(--background)",
       }),
     },
   },
+  ...DEADWAX_PRESETS,
   {
     id: "dracula",
     label: "Dracula",
@@ -705,7 +907,10 @@ export function readThemePalette(): ThemeSelection {
   if (typeof window === "undefined") return DEFAULT_PALETTE;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_PALETTE;
+    if (!raw) {
+      const legacy = window.localStorage.getItem(LEGACY_DEADWAX_STORAGE_KEY);
+      return isThemeSelection(legacy) ? legacy : DEFAULT_PALETTE;
+    }
     const parsed: unknown = JSON.parse(raw);
     return isThemeSelection(parsed) ? parsed : DEFAULT_PALETTE;
   } catch {

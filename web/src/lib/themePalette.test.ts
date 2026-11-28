@@ -112,7 +112,18 @@ describe("themePalette", () => {
     expect(readThemePalette()).toBe(DEFAULT_PALETTE);
   });
 
+  it("migrates the original Deadwax theme preference", () => {
+    localStorage.setItem("deadwax_theme_preference_v1", "jimi");
+    expect(readThemePalette()).toBe("jimi");
+    localStorage.setItem("deadwax_theme_preference_v1", "gold-blue");
+    expect(readThemePalette()).toBe(DEFAULT_PALETTE);
+    writeThemePalette("billie");
+    expect(readThemePalette()).toBe("billie");
+  });
+
   it("guards known vs unknown palette ids", () => {
+    expect(isThemePalette("jimi")).toBe(true);
+    expect(isThemePalette("record-store")).toBe(true);
     expect(isThemePalette("github")).toBe(true);
     expect(isThemePalette("omni")).toBe(true);
     expect(isThemePalette("nord")).toBe(true);
@@ -184,32 +195,36 @@ describe("themePalette", () => {
     for (const palette of PALETTES) {
       expect(palette.tokens.dark.shellBackground, palette.label).toBe("var(--background)");
     }
-    expect(PALETTES[0].tokens.dark.background).toBe("#0e0b19");
-    expect(PALETTES[0].tokens.dark.sidebar).toBe("#0e0b19");
+    expect(PALETTES[0].tokens.dark.background).toBe("#111318");
+    expect(PALETTES[0].tokens.dark.sidebar).toBe("#111318");
   });
 
-  it("uses white as the base for Omnigent dark form controls", () => {
+  it("uses white as the base for Deadwax dark form controls", () => {
     const omni = PALETTES.find((palette) => palette.id === "omni")!;
     expect(omni.tokens.dark.input).toBe("rgb(255 255 255 / 15%)");
   });
 
-  it("uses the Omnigent brand pink as the primary accent in both modes", () => {
+  it("uses Deadwax gold as the primary accent, deepened for light mode", () => {
     const omni = PALETTES.find((palette) => palette.id === "omni")!;
-    expect(omni.tokens.light.primary).toBe("#df3c85");
-    expect(omni.tokens.dark.primary).toBe("#df3c85");
+    expect(omni.label).toBe("Blue & Gold");
+    expect(omni.tokens.light.primary).toBe("#8a5d1a");
+    expect(omni.tokens.dark.primary).toBe("#edb978");
+    for (const mode of ["light", "dark"] as const) {
+      expect(omni.tokens[mode].brandAccent).toBe("#edb978");
+      expect(omni.tokens[mode].ring).toBe("#edb978");
+      expect(omni.tokens[mode].sidebarPrimary).toBe("#edb978");
+    }
   });
 
-  it("uses magenta links with neutral support controls in Omnigent", () => {
+  it("uses Deadwax blue links with readable support controls", () => {
     const omni = PALETTES.find((palette) => palette.id === "omni")!;
     for (const mode of ["light", "dark"] as const) {
       const tokens = omni.tokens[mode];
       const [red, green, blue] = parseColor(tokens.link).rgb;
-      expect(red).toBeGreaterThan(blue);
       expect(blue).toBeGreaterThan(green);
+      expect(green).toBeGreaterThan(red);
       const accent = parseColor(tokens.accent).rgb;
-      expect(Math.max(...accent) - Math.min(...accent)).toBeLessThanOrEqual(8);
       expect(contrast(parseColor(tokens.accentForeground).rgb, accent)).toBeGreaterThanOrEqual(4.5);
-      expect(tokens.sidebarPrimary).toBe("var(--link)");
     }
   });
 

@@ -286,15 +286,15 @@
   /* Weaker panel border for low-contrast dividers. */
   --border-weak: #ececee;
   --button-icon-hover-color: #27272a;
-  /* Pink tag surface — a translucent wash, so it tints whatever it sits on. */
-  --tag-pink: rgba(240, 1, 150, 0.06);
+  /* Gold tag surface — a translucent wash, so it tints whatever it sits on. */
+  --tag-pink: rgba(237, 185, 120, 0.14);
   /* Named status hues. success/warning/info above mirror green/yellow/blue. */
   --status-blue: #3b8ff5;
   --status-green: #2ea65c;
   --status-yellow: #d4972a;
   --status-red: #f04858;
   --status-gray: #8e99a4;
-  --chart-1: #3b8ff5;
+  --chart-1: #5b9bd5;
   --chart-2: #2272b4;
   --chart-3: #2ea65c;
   --chart-4: #d4972a;
@@ -348,20 +348,20 @@
      * the small dot keeps adequate contrast against the dark canvas (the
      * light-mode #2f7fd4 reads too dim here). */
   --session-active: #5ca4f5;
-  /* Pink tag surface — a heavier wash than light, since 6% all but vanishes
-     * against the dark canvas. */
-  --tag-pink: rgba(240, 1, 150, 0.15);
+  /* Gold tag surface — a heavier wash than light, since a light wash all but
+     * vanishes against the dark canvas. */
+  --tag-pink: rgba(237, 185, 120, 0.18);
   --status-blue: #3b8ff5;
   --status-green: #2ea65c;
   --status-yellow: #d4972a;
   --status-red: #f04858;
   --status-gray: #8e99a4;
-  --chart-1: oklch(0.64 0.22 254);
+  --chart-1: #5b9bd5;
   --chart-2: oklch(0.65 0.14 200);
   --chart-3: oklch(0.68 0.15 145);
   --chart-4: oklch(0.75 0.16 70);
   --chart-5: oklch(0.65 0.008 240);
-  --tooltip-bg: #2a2440;
+  --tooltip-bg: #22262f;
 }
 
 /* Main-sidebar item labels use the same text-ui semantic step as Appearance
@@ -2039,35 +2039,49 @@ html[data-electron-mac] .breadcrumb-folder {
   }
 }
 
-/* Share button — glassy pink effect (both modes). The vertical
- * gradient alone does the embossed work (lighter top = light catch,
- * darker bottom = shadow, simulating a convex surface lit from above);
- * no border or inset shine. Light mode: gentler gradient, no shadow —
- * the full emboss + dark depth shadow reads too heavy on the light
- * canvas. Dark mode: stronger emboss plus the grounding shadow. */
+/* Share button — glassy, embossed from the active palette's brand accent
+ * (lighter top, darker bottom). Light mode skips the depth shadow, which
+ * reads too heavy on the light canvas. */
 .share-button-glassy {
-  background: linear-gradient(to bottom, #fa3d99 0%, #f22286 40%, #d51d74 100%);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--brand-accent) 86%, white) 0%,
+    var(--brand-accent) 45%,
+    color-mix(in srgb, var(--brand-accent) 82%, black) 100%
+  );
   border: none;
   box-shadow: none;
-  color: #ffffff;
+  color: var(--sidebar-primary-foreground);
 }
 
 .share-button-glassy:hover {
-  /* Darken the gradient slightly on hover */
-  background: linear-gradient(to bottom, #ec3790 0%, #e51b7d 40%, #c41a6b 100%);
+  background: linear-gradient(
+    to bottom,
+    var(--brand-accent) 0%,
+    color-mix(in srgb, var(--brand-accent) 78%, black) 100%
+  );
 }
 
 .dark .share-button-glassy {
-  background: linear-gradient(150deg, #ff4da6 0%, #f22286 40%, #b8185f 100%);
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--brand-accent) 90%, white) 0%,
+    var(--brand-accent) 45%,
+    color-mix(in srgb, var(--brand-accent) 76%, black) 100%
+  );
   border: none;
   box-shadow:
     0 4px 16px rgba(0, 0, 0, 0.5),
     0 1px 3px rgba(0, 0, 0, 0.4);
-  color: #ffffff;
+  color: var(--sidebar-primary-foreground);
 }
 
 .dark .share-button-glassy:hover {
-  background: linear-gradient(150deg, #f0408f 0%, #e51b7d 40%, #a51455 100%);
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--brand-accent) 96%, white) 0%,
+    color-mix(in srgb, var(--brand-accent) 80%, black) 100%
+  );
 }
 
 @layer base {
